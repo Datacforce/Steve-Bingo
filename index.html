@@ -452,7 +452,11 @@ input:focus, textarea:focus, button:focus-visible {
   padding: 8px 6px;
   text-align: center;
   opacity: 0.45;
-  transition: opacity 0.2s, border-color 0.2s, background 0.2s;
+  cursor: pointer;
+  transition: opacity 0.2s, border-color 0.2s, background 0.2s, transform 0.08s ease;
+}
+.trophy-card:hover { filter: brightness(1.2); }
+.trophy-card:active { transform: scale(0.96); }
 }
 .trophy-card.unlocked {
   opacity: 1;
@@ -528,7 +532,7 @@ input:focus, textarea:focus, button:focus-visible {
   position: fixed;
   bottom: 20px;
   right: 20px;
-  z-index: 9998;
+  z-index: 100001;
   background: #1a2c26;
   border: 1.5px solid var(--accent2);
   border-radius: 12px;
@@ -2001,7 +2005,11 @@ input:focus, textarea:focus, button:focus-visible {
         <div class="trophy-count">${isUn ? `✓ ${prof.counts[ach.id] || 1}x` : "Locked"}</div>
       `;
       card.title = `${ach.name}: ${ach.desc}`;
-      grid.appendChild(card);
+card.onclick = () => {
+  const status = isUn ? `(Unlocked ${prof.counts[ach.id] || 1}x)` : "(Locked)";
+  showToast(ach.emoji, `${ach.name} ${status}`, `How to get: ${ach.desc}`);
+};
+grid.appendChild(card);
     });
   }
 
@@ -3243,8 +3251,12 @@ input:focus, textarea:focus, button:focus-visible {
         <div class="trophy-name">${ach.name}</div>
         <div class="trophy-count">${isUn ? `✓ ${prof.counts[ach.id] || 1}x` : "Locked"}</div>
       `;
-      card.title = `${ach.name}: ${ach.desc}`;
-      grid.appendChild(card);
+ card.title = `${ach.name}: ${ach.desc}`;
+card.onclick = () => {
+  const status = isUn ? `(Unlocked ${prof.counts[ach.id] || 1}x)` : "(Locked)";
+  showToast(ach.emoji, `${ach.name} ${status}`, `How to get: ${ach.desc}`);
+};
+grid.appendChild(card);
     });
 
     $("profileModal").classList.remove("hidden");

@@ -1,11 +1,10 @@
-```html
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1e1a2e">
-<title>Steve Bingo!</title>
+<title>Steve Bingo! 🍟</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍟</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 <style>
@@ -1125,25 +1124,30 @@ input:focus, textarea:focus, button:focus-visible {
   // Manual Difficulty Ranking (Rank 1 = Most Difficult -> Rank 12 = Least Difficult)
   // You can easily adjust the order of this list anytime to customize the priority!
   const ACHIEVEMENT_DIFFICULTY_RANK = [
-    "blackout",            // 🌑 #1 Hardest: Mark all 25 squares on the card
-    "perimeter",              // ⚔️ #2 Complete both diagonals on the board
-    "sniper",           // 🔲 #3 Mark all 16 outer border squares
-    "crossfire",      // 👯 #4 Complete 2 lines at the exact same time
-    "center_of_attention", // 🌟 #5 Complete center row & center column
-    "double_trouble",           // 🙅 #6 Mark 4 squares in 3 lines before bingo
-    "four_corners",              // 🎯 #7 Hit bingo with exactly 5 marked squares
-    "denial",        // 📐 #8 Mark all 4 outer corner squares
-    "first_on_scene",      // 🥇 #9 First player to hit bingo today      // 💡 #10 Have a suggested square approved
-    "lightning_start",     // ⏱️ #11 Mark 3 squares in first 10 minutes
-    "quick_draw",          // ⚡ #12 Hit a bingo in under 60 minutes
-    "crowd_pleaser"
+    "blackout",            // 🌑 #1 Hardest (1 in 200M+): Mark all 25 squares on the card
+    "perimeter",           // 🔲 #2 (1 in 34,000): Mark all 16 outer border squares
+    "sniper",              // 🎯 #3 (1 in 2,656): Hit bingo with exactly 5 marked squares
+    "crossfire",           // ⚔️ #4 (1 in 92): Complete both diagonals on the board
+    "center_of_attention", // 🌟 #5 (1 in 92): Complete center row & center column
+    "double_trouble",      // 👯 #6 (1 in 24): Complete 2 lines at the exact same time
+    "four_corners",        // 📐 #7 (1 in 8): Mark all 4 outer corner squares
+    "denial",              // 🙅 #8 (1 in 2): Mark 4 squares in 3 lines before bingo
+    "first_on_scene",      // 🥇 #9 (1 in N players): First player to hit bingo today
+    "lightning_start",     // ⏱️ #10 (~20%): Mark 3 squares in first 10 minutes
+    "quick_draw",          // ⚡ #11 (~85% of bingos): Hit a bingo in under 60 minutes
+    "crowd_pleaser"        // 💡 #12 (Social/Manager approval): Have a suggested square approved
   ];
 
   function getHighestRankBadge(unlockedIds) {
     if (!Array.isArray(unlockedIds) || !unlockedIds.length) return null;
-    for (const achId of ACHIEVEMENT_DIFFICULTY_RANK) {
+    const rankList = (typeof ACHIEVEMENT_DIFFICULTY_RANK !== "undefined" && Array.isArray(ACHIEVEMENT_DIFFICULTY_RANK))
+      ? ACHIEVEMENT_DIFFICULTY_RANK
+      : ["blackout", "perimeter", "sniper", "crossfire", "center_of_attention", "double_trouble", "four_corners", "denial", "first_on_scene", "lightning_start", "quick_draw", "crowd_pleaser"];
+    for (const rawId of rankList) {
+      const achId = rawId === "perimiter" ? "perimeter" : rawId;
       if (unlockedIds.includes(achId)) {
-        return ACHIEVEMENTS.find(a => a.id === achId);
+        const found = ACHIEVEMENTS.find(a => a.id === achId);
+        if (found) return found;
       }
     }
     return null;
@@ -1478,14 +1482,14 @@ input:focus, textarea:focus, button:focus-visible {
     // Initialize multiplayer / cross-tab broadcast
     initBroadcast();
 
-    // Render UI
-    renderHeader();
-    renderBoard();
-    renderLeaderboard();
-    renderFeed();
-    renderTrophiesWidget();
-    updateModeSwitcherUI();
-    updateSettingsNavBadge();
+    // Render UI safely
+    try { renderHeader(); } catch (e) { console.error("renderHeader error", e); }
+    try { renderBoard(); } catch (e) { console.error("renderBoard error", e); }
+    try { renderLeaderboard(); } catch (e) { console.error("renderLeaderboard error", e); }
+    try { renderFeed(); } catch (e) { console.error("renderFeed error", e); }
+    try { renderTrophiesWidget(); } catch (e) { console.error("renderTrophiesWidget error", e); }
+    try { updateModeSwitcherUI(); } catch (e) { console.error("updateModeSwitcherUI error", e); }
+    try { updateSettingsNavBadge(); } catch (e) { console.error("updateSettingsNavBadge error", e); }
 
     // Check if player has answered the "Would you like to play today?" prompt
     if (!state.playedToday) {
@@ -2135,9 +2139,9 @@ input:focus, textarea:focus, button:focus-visible {
     const tab = state.leaderboardTab || "fastest";
 
     // Update Tab active classes
-    $("tabFastestBtn").className = "tab-btn" + (tab === "fastest" ? " active" : "");
-    $("tabBingosBtn").className = "tab-btn" + (tab === "bingos" ? " active" : "");
-    $("tabSquaresBtn").className = "tab-btn" + (tab === "squares" ? " active" : "");
+    const b1 = $("tabFastestBtn"); if (b1) b1.className = "tab-btn" + (tab === "fastest" ? " active" : "");
+    const b2 = $("tabBingosBtn"); if (b2) b2.className = "tab-btn" + (tab === "bingos" ? " active" : "");
+    const b3 = $("tabSquaresBtn"); if (b3) b3.className = "tab-btn" + (tab === "squares" ? " active" : "");
 
     // 1. FASTEST BINGO TAB (Only populates when someone gets a bingo)
     if (tab === "fastest") {
@@ -2315,74 +2319,94 @@ input:focus, textarea:focus, button:focus-visible {
   }
 
   function renderHeader() {
-    const avatar = state.avatarEmoji || "🍟";
-    const nick = state.nickname || "Anonymous";
+    try {
+      const avatar = state.avatarEmoji || "🍟";
+      const nick = state.nickname || "Anonymous";
 
-    const headerAvatar = $("headerAvatarDisplay");
-    if (headerAvatar) headerAvatar.textContent = avatar;
-    $("headerNickDisplay").textContent = nick;
+      const headerAvatar = $("headerAvatarDisplay");
+      if (headerAvatar) headerAvatar.textContent = avatar;
+      const headerNick = $("headerNickDisplay");
+      if (headerNick) headerNick.textContent = nick;
 
-    const boardAvatar = $("boardAvatarDisplay");
-    if (boardAvatar) boardAvatar.textContent = avatar;
-    $("boardNickDisplay").textContent = nick;
+      const boardAvatar = $("boardAvatarDisplay");
+      if (boardAvatar) boardAvatar.textContent = avatar;
+      const boardNick = $("boardNickDisplay");
+      if (boardNick) boardNick.textContent = nick;
 
-    const prof = getProfile(nick);
-    const topAch = getHighestRankBadge(prof.unlockedTrophies || []);
-    const badgeEl = $("boardBadgesDisplay");
-    if (badgeEl) {
-      if (topAch) {
-        badgeEl.textContent = " " + topAch.emoji;
-        badgeEl.title = `Highest Trophy: ${topAch.name} (${topAch.desc}) — Tap to view`;
-        badgeEl.style.cursor = "pointer";
-        badgeEl.onclick = () => showToast(topAch.emoji, `Top Trophy: ${topAch.name}`, topAch.desc);
-      } else {
-        badgeEl.textContent = "";
-        badgeEl.title = "";
-        badgeEl.onclick = null;
+      const prof = getProfile(nick);
+      const topAch = getHighestRankBadge(prof.unlockedTrophies || []);
+      const badgeEl = $("boardBadgesDisplay");
+      if (badgeEl) {
+        if (topAch && topAch.name && topAch.emoji) {
+          badgeEl.textContent = " " + topAch.emoji;
+          badgeEl.title = `Highest Trophy: ${topAch.name} (${topAch.desc}) — Tap to view`;
+          badgeEl.style.cursor = "pointer";
+          badgeEl.onclick = () => showToast(topAch.emoji, `Top Trophy: ${topAch.name}`, topAch.desc);
+        } else {
+          badgeEl.textContent = "";
+          badgeEl.title = "";
+          badgeEl.onclick = null;
+        }
       }
+    } catch (e) {
+      console.warn("renderHeader caught error:", e);
     }
   }
 
   function renderBoard() {
-    const boardEl = $("board");
-    if (!boardEl) return;
+    try {
+      const boardEl = $("board");
+      if (!boardEl) return;
 
-    boardEl.innerHTML = "";
+      boardEl.innerHTML = "";
 
-    // S - T - E - V - E Column Headers
-    ["S", "T", "E", "V", "E"].forEach(letter => {
-      const h = document.createElement("div");
-      h.className = "head-cell";
-      h.textContent = letter;
-      boardEl.appendChild(h);
-    });
+      // S - T - E - V - E Column Headers
+      ["S", "T", "E", "V", "E"].forEach(letter => {
+        const h = document.createElement("div");
+        h.className = "head-cell";
+        h.textContent = letter;
+        boardEl.appendChild(h);
+      });
 
-    const lines = getCompletedLines();
-    const winIndices = new Set(lines.flat());
+      if (!Array.isArray(state.board) || state.board.length !== 25) {
+        generateFreshBoardForMode(state.gameMode || "steve", false);
+      }
+      if (!Array.isArray(state.marked) || state.marked.length !== 25) {
+        state.marked = Array(25).fill(false);
+        state.marked[12] = true;
+      }
 
-    state.board.forEach((phrase, idx) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      const isFree = idx === 12;
-      const isMarked = !!state.marked[idx];
-      const isWin = winIndices.has(idx);
+      const lines = getCompletedLines();
+      const winIndices = new Set(lines.flat());
 
-      let classes = "tile";
-      if (isFree) classes += " free-space";
-      if (isMarked) classes += " marked";
-      if (isWin) classes += " winline";
-      btn.className = classes;
+      state.board.forEach((phrase, idx) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        const isFree = idx === 12;
+        const isMarked = !!state.marked[idx];
+        const isWin = winIndices.has(idx);
 
-      btn.textContent = phrase;
-      btn.setAttribute("aria-pressed", String(isMarked));
-      btn.setAttribute("aria-label", `${phrase}${isMarked ? ", marked" : ", not marked"}${isWin ? ", in winning line" : ""}`);
+        let classes = "tile";
+        if (isFree) classes += " free-space";
+        if (isMarked) classes += " marked";
+        if (isWin) classes += " winline";
+        btn.className = classes;
 
-      btn.onclick = () => handleSquareClick(idx);
-      boardEl.appendChild(btn);
-    });
+        btn.textContent = phrase;
+        btn.setAttribute("aria-pressed", String(isMarked));
+        btn.setAttribute("aria-label", `${phrase}${isMarked ? ", marked" : ", not marked"}${isWin ? ", in winning line" : ""}`);
 
-    $("markedCountDisplay").textContent = `${state.marked.filter(Boolean).length} / 25`;
-    $("linesCountDisplay").textContent = `${lines.length} Line${lines.length === 1 ? "" : "s"}`;
+        btn.onclick = () => handleSquareClick(idx);
+        boardEl.appendChild(btn);
+      });
+
+      const markedEl = $("markedCountDisplay");
+      if (markedEl) markedEl.textContent = `${state.marked.filter(Boolean).length} / 25`;
+      const linesEl = $("linesCountDisplay");
+      if (linesEl) linesEl.textContent = `${lines.length} Line${lines.length === 1 ? "" : "s"}`;
+    } catch (e) {
+      console.error("renderBoard error:", e);
+    }
   }
 
   /* ============================================================ */
@@ -2766,4 +2790,1876 @@ input:focus, textarea:focus, button:focus-visible {
     const text = input ? input.value.trim() : "";
     const statusEl = $("suggestStatus");
 
+    if (!text || text.length < 3) {
+      statusEl.textContent = "Please enter an idea with at least 3 characters.";
+      return;
+    }
+
+    if (state.suggestions.some(s => s.text.toLowerCase() === text.toLowerCase() && s.status === "pending")) {
+      statusEl.textContent = "That suggestion is already waiting for manager review.";
+      return;
+    }
+
+    const newSug = {
+      id: "sug_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      text: text.slice(0, 100),
+      suggestedBy: state.nickname || "Player",
+      date: new Date().toISOString(),
+      status: "pending"
+    };
+
+    state.suggestions.unshift(newSug);
+    state.suggestions = state.suggestions.slice(0, 150);
+    saveState();
+
+    updateSettingsNavBadge();
+
+    // 1. Publish dedicated retained suggestions sync so newcomers get it immediately
+    publishSuggestionsSync();
+
+    // 2. Broadcast real-time suggestion submitted event across active browsers
+    broadcastEvent({
+      type: "suggestion_submitted",
+      suggestion: newSug
+    });
+
+    // 3. Update room snapshot
+    publishRoomSnapshot();
+
+    if (input) input.value = "";
+    statusEl.textContent = "✓ Idea submitted for manager review. Thank you!";
+    showToast("💡", "Suggestion Sent!", "Your square idea was submitted to the manager.");
+    setTimeout(() => handleCloseModal("suggestModal"), 1600);
+  }
+
+  /* ============================================================ */
+  /* SETTINGS MENU (Passcode Protected)                           */
+  /* ============================================================ */
+  function handleUnlockSettings() {
+    const entered = $("settingsPinInput").value.trim();
+    const correct = state.passcode || DEFAULT_PIN;
+    const statusEl = $("settingsLockStatus");
+
+    if (entered === correct) {
+      settingsUnlocked = true;
+      $("settingsLockArea").classList.add("hidden");
+      $("settingsUnlockedArea").classList.remove("hidden");
+      statusEl.textContent = "";
+      $("settingsPinInput").value = "";
+      renderSettingsManagerView();
+      updateSettingsNavBadge();
+    } else {
+      statusEl.textContent = "Incorrect passcode. Please try again.";
+      $("settingsPinInput").value = "";
+    }
+  }
+
+  function handleLockSettings() {
+    settingsUnlocked = false;
+    $("settingsUnlockedArea").classList.add("hidden");
+    $("settingsLockArea").classList.remove("hidden");
+    $("settingsLockStatus").textContent = "";
+  }
+
+  function renderSettingsManagerView() {
+    // 1. Suggestions List
+    const sugList = $("settingsSuggestionsList");
+    const countTag = $("settingsPendingCount");
+    const pending = state.suggestions.filter(s => s.status === "pending");
+    if (countTag) countTag.textContent = pending.length;
+
+    if (!pending.length) {
+      sugList.innerHTML = `<div class="empty-msg">No pending suggestions.</div>`;
+    } else {
+      sugList.innerHTML = "";
+      pending.forEach(s => {
+        const item = document.createElement("div");
+        item.style.background = "#141120";
+        item.style.padding = "8px 10px";
+        item.style.borderRadius = "8px";
+        item.style.border = "1px solid var(--line)";
+        item.style.display = "flex";
+        item.style.justifyContent = "space-between";
+        item.style.alignItems = "center";
+        item.style.gap = "8px";
+
+        const textDiv = document.createElement("div");
+        textDiv.innerHTML = `<strong>${s.text}</strong> <small class="feed-meta">by ${s.suggestedBy}</small>`;
+
+        const acts = document.createElement("div");
+        acts.style.display = "flex";
+        acts.style.gap = "6px";
+
+        const acceptBtn = document.createElement("button");
+        acceptBtn.className = "primary small-btn";
+        acceptBtn.textContent = "Accept";
+        acceptBtn.onclick = () => {
+          s.status = "approved";
+          if (!state.approvedSuggestionIds) state.approvedSuggestionIds = [];
+          if (!state.approvedSuggestionIds.includes(s.id)) {
+            state.approvedSuggestionIds.push(s.id);
+          }
+          if (!state.phrases.some(p => p.toLowerCase() === s.text.toLowerCase())) {
+            state.phrases.push(s.text);
+          }
+          unlockAchievement("crowd_pleaser", s.suggestedBy);
+          saveState();
+          renderSettingsManagerView();
+          updateSettingsNavBadge();
+          showToast("✓", "Accepted!", `Added "${s.text}" to active phrase pool.`);
+
+          publishSuggestionsSync();
+          broadcastEvent({
+            type: "suggestion_status",
+            id: s.id,
+            status: "approved",
+            phrase: s.text,
+            author: s.suggestedBy,
+            approvedSuggestionIds: state.approvedSuggestionIds
+          });
+          broadcastEvent({
+            type: "settings_update",
+            setting: "phrases",
+            phrases: state.phrases
+          });
+          publishRoomSnapshot();
+        };
+
+        const rejectBtn = document.createElement("button");
+        rejectBtn.className = "danger small-btn";
+        rejectBtn.textContent = "Reject";
+        rejectBtn.onclick = () => {
+          s.status = "rejected";
+          if (!state.rejectedSuggestionIds) state.rejectedSuggestionIds = [];
+          if (!state.rejectedSuggestionIds.includes(s.id)) {
+            state.rejectedSuggestionIds.push(s.id);
+          }
+          saveState();
+          renderSettingsManagerView();
+          updateSettingsNavBadge();
+          showToast("🗑️", "Rejected", `Suggestion removed from pending.`);
+
+          publishSuggestionsSync();
+          broadcastEvent({
+            type: "suggestion_status",
+            id: s.id,
+            status: "rejected",
+            phrase: s.text,
+            author: s.suggestedBy,
+            rejectedSuggestionIds: state.rejectedSuggestionIds
+          });
+          publishRoomSnapshot();
+        };
+
+        acts.appendChild(acceptBtn);
+        acts.appendChild(rejectBtn);
+        item.appendChild(textDiv);
+        item.appendChild(acts);
+        sugList.appendChild(item);
+      });
+    }
+
+    // 2. Active Phrase Pool Editor
+    handleSwitchSettingsPhrasePool(settingsCurrentPhraseMode || "steve");
+
+    // 3. Today's Account Manager
+    renderSettingsAccountManager();
+  }
+
+  function renderSettingsAccountManager() {
+    const list = $("settingsAccountList");
+    const countTag = $("settingsAccountCount");
+    if (!list) return;
+
+    const players = Object.values(state.dailyPlayers || {});
+    if (countTag) countTag.textContent = players.length;
+
+    if (!players.length) {
+      list.innerHTML = `<div class="empty-msg">No accounts active today yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = "";
+    players.forEach(p => {
+      const card = document.createElement("div");
+      card.style.background = "#141120";
+      card.style.padding = "10px 12px";
+      card.style.borderRadius = "10px";
+      card.style.border = "1px solid var(--line)";
+      card.style.display = "flex";
+      card.style.justifyContent = "space-between";
+      card.style.alignItems = "center";
+      card.style.flexWrap = "wrap";
+      card.style.gap = "10px";
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.alignItems = "center";
+      left.style.gap = "8px";
+
+      const av = document.createElement("span");
+      av.style.fontSize = "1.5rem";
+      av.textContent = p.avatarEmoji || "🍟";
+
+      const info = document.createElement("div");
+      const name = document.createElement("strong");
+      name.style.color = "var(--text)";
+      name.textContent = p.nickname;
+
+      const sub = document.createElement("div");
+      sub.className = "feed-meta";
+      const fastestText = p.fastestMs ? formatTime(p.fastestMs) : "—";
+      sub.textContent = `${p.squares || 0}/25 squares · ${p.bingos || 0} bingos · Fastest: ${fastestText}`;
+
+      info.appendChild(name);
+      info.appendChild(sub);
+      left.appendChild(av);
+      left.appendChild(info);
+
+      const right = document.createElement("div");
+      right.style.display = "flex";
+      right.style.gap = "6px";
+      right.style.flexWrap = "wrap";
+
+      const resetTodayBtn = document.createElement("button");
+      resetTodayBtn.className = "danger small-btn";
+      resetTodayBtn.textContent = "Reset Today";
+      resetTodayBtn.title = `Reset ${p.nickname}'s active card and leaderboard entry for today`;
+      resetTodayBtn.onclick = () => handleResetSingleDailyAccountAction(p.nickname);
+
+      const clearLifetimeBtn = document.createElement("button");
+      clearLifetimeBtn.className = "small-btn";
+      clearLifetimeBtn.style.borderColor = "#733440";
+      clearLifetimeBtn.style.color = "#ff9eac";
+      clearLifetimeBtn.textContent = "Clear Lifetime Stats";
+      clearLifetimeBtn.title = `Wipe all lifetime trophies and total stats for ${p.nickname}`;
+      clearLifetimeBtn.onclick = () => handleClearPlayerLifetimeStatsAction(p.nickname);
+
+      right.appendChild(resetTodayBtn);
+      right.appendChild(clearLifetimeBtn);
+
+      card.appendChild(left);
+      card.appendChild(right);
+      list.appendChild(card);
+    });
+  }
+
+  function handleResetSingleDailyAccountAction(targetNick) {
+    if (!targetNick) return;
+    openConfirmPrompt("Reset Daily Account", `Reset today's session for "${targetNick}"? Their card marks and today's leaderboard runs will be cleared so they can start today fresh.`, () => {
+      if (state.dailyPlayers && state.dailyPlayers[targetNick]) {
+        delete state.dailyPlayers[targetNick];
+      }
+      if (Array.isArray(state.dailyLeaderboardRuns)) {
+        state.dailyLeaderboardRuns = state.dailyLeaderboardRuns.filter(r => r.nickname !== targetNick);
+      }
+
+      // If resetting own account
+      if (targetNick === state.nickname) {
+        state.playedToday = false;
+        state.bingosCount = 0;
+        state.linesCount = 0;
+        state.marked = Array(25).fill(false);
+        state.marked[12] = true;
+        state.timerStartedAt = null;
+        state.timerElapsedBefore = 0;
+        state.isCompleted = false;
+        state.cardAchievements = [];
+        stopTimerTicker();
+        updateTimerDisplay();
+        renderBoard();
+        showDailyGate();
+      }
+
+      saveState();
+      renderLeaderboard();
+      renderSettingsManagerView();
+      showToast("👤", "Account Reset", `Today's session for "${targetNick}" has been reset.`);
+
+      // Broadcast to other devices
+      broadcastEvent({
+        type: "reset_single_daily_account",
+        targetNick: targetNick
+      });
+      publishRoomSnapshot();
+    }, true);
+  }
+
+  function handleResetAllDailyAccountsAction() {
+    openConfirmPrompt("Reset All Today's Accounts", "Reset all accounts active in today's match across all browsers? All daily cards and leaderboard entries will be cleared, prompting players to check in fresh.", () => {
+      state.dailyPlayers = {};
+      state.dailyLeaderboardRuns = [];
+      state.playedToday = false;
+      state.bingosCount = 0;
+      state.linesCount = 0;
+      state.marked = Array(25).fill(false);
+      state.marked[12] = true;
+      state.timerStartedAt = null;
+      state.timerElapsedBefore = 0;
+      state.isCompleted = false;
+      state.cardAchievements = [];
+      stopTimerTicker();
+      updateTimerDisplay();
+
+      saveState();
+      renderBoard();
+      renderLeaderboard();
+      renderSettingsManagerView();
+      showDailyGate();
+      showToast("👥", "All Accounts Reset", "All active accounts for today have been reset.");
+
+      // Broadcast to all connected browsers
+      broadcastEvent({
+        type: "reset_all_daily_accounts"
+      });
+      publishRoomSnapshot();
+    }, true);
+  }
+
+  function handleClearPlayerLifetimeStatsAction(targetNick) {
+    if (!targetNick) return;
+    openConfirmPrompt("Clear Lifetime Stats", `Clear all lifetime statistics, total bingos, and unlocked trophies for "${targetNick}" across all devices? This cannot be undone.`, () => {
+      if (!state.profiles) state.profiles = {};
+      const currentAvatar = (state.profiles[targetNick]?.avatarEmoji) || "🍟";
+      state.profiles[targetNick] = {
+        unlockedTrophies: [],
+        counts: {},
+        totalBingos: 0,
+        fastestEverMs: 0,
+        gamesPlayed: 0,
+        avatarEmoji: currentAvatar
+      };
+
+      if (targetNick === state.nickname) {
+        state.cardAchievements = [];
+        renderTrophiesWidget();
+      }
+
+      saveState();
+      renderHeader();
+      renderLeaderboard();
+      renderSettingsManagerView();
+      showToast("🗑️", "Stats Cleared", `Lifetime stats for "${targetNick}" have been cleared.`);
+
+      // Broadcast to other devices
+      broadcastEvent({
+        type: "clear_player_lifetime_stats",
+        targetNick: targetNick
+      });
+      publishRoomSnapshot();
+    }, true);
+  }
+
+  function handleClearCurrentProfileStats() {
+    const targetNick = $("profileModalName") ? $("profileModalName").textContent.trim() : state.nickname;
+    handleClearPlayerLifetimeStatsAction(targetNick);
+    handleCloseModal("profileModal");
+  }
+
+  function handleSwitchSettingsPhrasePool(mode) {
+    settingsCurrentPhraseMode = mode || "steve";
+    const isSteve = settingsCurrentPhraseMode === "steve";
+    const sBtn = $("settingsPhraseSteveBtn");
+    const eBtn = $("settingsPhraseEverybodyBtn");
+    if (sBtn) sBtn.className = "mode-tab-btn" + (isSteve ? " active steve" : "");
+    if (eBtn) eBtn.className = "mode-tab-btn" + (!isSteve ? " active everybody" : "");
+
+    if (!state.phrasePools) {
+      state.phrasePools = {
+        steve: [...DEFAULT_STEVE_PHRASES],
+        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      };
+    }
+    const pool = state.phrasePools[settingsCurrentPhraseMode] || (isSteve ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES);
+    $("settingsPhraseCount").textContent = pool.length;
+    $("settingsPhrasesEditor").value = pool.join("\n");
+    $("settingsPhrasesStatus").textContent = "";
+  }
+
+  function handleSavePhrasesAction() {
+    const raw = $("settingsPhrasesEditor").value;
+    const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const unique = [...new Set(lines)];
+
+    if (unique.length < 24) {
+      $("settingsPhrasesStatus").textContent = `At least 24 unique phrases required for 5×5 bingo (currently ${unique.length}).`;
+      return;
+    }
+
+    const mode = settingsCurrentPhraseMode || "steve";
+    if (!state.phrasePools) state.phrasePools = {};
+    state.phrasePools[mode] = unique;
+    if (state.gameMode === mode) {
+      state.phrases = unique;
+    }
+    saveState();
+    $("settingsPhraseCount").textContent = unique.length;
+    const modeLabel = mode === "steve" ? "Steve Prompts" : "Everybody Prompts";
+    $("settingsPhrasesStatus").textContent = `✓ Saved ${unique.length} phrases for ${modeLabel}! Fresh boards will pull from this pool.`;
+    showToast("📝", "Phrase Pool Saved", `${modeLabel} updated (${unique.length} phrases).`);
+
+    // Broadcast updated phrase pool to all connected browsers
+    broadcastEvent({
+      type: "settings_update",
+      setting: "phrases",
+      mode: mode,
+      phrases: unique
+    });
+    publishRoomSnapshot();
+  }
+
+  function handleRestoreDefaultPhrases() {
+    const mode = settingsCurrentPhraseMode || "steve";
+    const modeLabel = mode === "steve" ? "Steve Mode" : "Everybody Mode";
+    const defaults = mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES;
+
+    openConfirmPrompt("Restore Default Phrases", `Reset ${modeLabel} phrase pool back to default 50 phrases?`, () => {
+      if (!state.phrasePools) state.phrasePools = {};
+      state.phrasePools[mode] = [...defaults];
+      if (state.gameMode === mode) {
+        state.phrases = [...defaults];
+      }
+      saveState();
+      handleSwitchSettingsPhrasePool(mode);
+      showToast("🔄", "Defaults Restored", `${modeLabel} phrase pool restored.`);
+
+      // Broadcast restored defaults across all browsers
+      broadcastEvent({
+        type: "settings_update",
+        setting: "phrases",
+        mode: mode,
+        phrases: defaults
+      });
+      publishRoomSnapshot();
+    });
+  }
+
+  function handleSaveNewPasscode() {
+    const newPin = $("settingsNewPinInput").value.trim();
+    if (!newPin || newPin.length < 4) {
+      $("settingsPinChangeStatus").textContent = "Passcode must be at least 4 digits.";
+      return;
+    }
+    const now = Date.now();
+    state.passcode = newPin;
+    state.passcodeUpdatedAt = now;
+    saveState();
+    $("settingsNewPinInput").value = "";
+    $("settingsPinChangeStatus").textContent = "✓ Passcode updated successfully!";
+    showToast("🔐", "Passcode Updated", "Manager passcode updated across all browsers.");
+
+    // Broadcast new passcode to all connected browsers
+    broadcastEvent({
+      type: "settings_update",
+      setting: "passcode",
+      passcode: newPin,
+      passcodeUpdatedAt: now
+    });
+    publishRoomSnapshot();
+  }
+
+  function handleClearFeedAction() {
+    openConfirmPrompt("Clear Live Feed", "Clear all entries in today's live activity feed across all browsers?", () => {
+      const now = Date.now();
+      state.dailyFeed = [];
+      state.feedClearedAt = now;
+      saveState();
+      renderFeed();
+      showToast("🧹", "Feed Cleared", "Live room feed cleared across all browsers.");
+
+      // Broadcast clear feed with epoch timestamp
+      broadcastEvent({
+        type: "clear_feed",
+        clearedAt: now
+      });
+      publishRoomSnapshot();
+    }, true);
+  }
+
+  function handleClearLeaderboardAction() {
+    openConfirmPrompt("Clear Leaderboard", "Clear all daily leaderboard records for today across all browsers?", () => {
+      const now = Date.now();
+      state.dailyLeaderboardRuns = [];
+      state.dailyPlayers = {};
+      state.leaderboardClearedAt = now;
+      saveState();
+      renderLeaderboard();
+      showToast("🏆", "Leaderboard Cleared", "Today's leaderboard cleared across all browsers.");
+
+      // Broadcast clear leaderboard with epoch timestamp
+      broadcastEvent({
+        type: "clear_leaderboard",
+        clearedAt: now
+      });
+      publishRoomSnapshot();
+    }, true);
+  }
+
+  /* ============================================================ */
+  /* MODAL OPEN/CLOSE & PROMPT HELPERS                            */
+  /* ============================================================ */
+  function showDailyGate() {
+    $("dailyGateNickInput").value = state.nickname || "";
+    $("dailyGateModal").classList.remove("hidden");
+  }
+
+  function handleConfirmPlayToday() {
+    const nickInput = $("dailyGateNickInput").value.trim().slice(0, 24);
+    if (nickInput) {
+      state.nickname = nickInput;
+    }
+    state.playedToday = true;
+
+    // Start timer on "Play Today's Game" button
+    if (!state.timerStartedAt && !state.isCompleted) {
+      state.timerStartedAt = Date.now();
+      state.timerElapsedBefore = 0;
+      startTimerTicker();
+      trackGamePlayed();
+    }
+
+    updateCurrentPlayerTodayStats();
+    saveState();
+
+    $("dailyGateModal").classList.add("hidden");
+    renderHeader();
+    renderLeaderboard();
+
+    // Announce player joined in feed
+    const joinFeedId = `feed_join_${state.nickname}_${state.activeDayCycleId}`;
+    addFeedItem({
+      id: joinFeedId,
+      type: "join",
+      user: state.nickname,
+      avatar: state.avatarEmoji || "🍟",
+      message: "joined today's Steve Bingo match!",
+      tag: "JOIN",
+      timestamp: Date.now()
+    });
+
+    // Broadcast join event with player profile so others can inspect trophies & stats
+    const myProf = getProfile(state.nickname);
+    broadcastEvent({
+      type: "join",
+      joinId: joinFeedId,
+      user: state.nickname,
+      avatar: state.avatarEmoji || "🍟",
+      squares: state.marked.filter(Boolean).length,
+      bingos: state.bingosCount || 0,
+      fastestMs: state.isCompleted ? getElapsedMs() : (myProf.fastestEverMs || 0),
+      profile: {
+        unlockedTrophies: myProf.unlockedTrophies || [],
+        counts: myProf.counts || {},
+        totalBingos: myProf.totalBingos || 0,
+        fastestEverMs: myProf.fastestEverMs || 0,
+        gamesPlayed: myProf.gamesPlayed || 0,
+        avatarEmoji: state.avatarEmoji || "🍟"
+      },
+      feed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 15)
+    });
+
+    showToast(state.avatarEmoji || "🍟", `Welcome ${state.nickname}!`, "You're all set to play today's bingo match.");
+  }
+
+  /* ============================================================ */
+  /* EDIT PROFILE & AVATAR EMOJI ENGINE                           */
+  /* ============================================================ */
+  function handleOpenEditProfileModal() {
+    selectedAvatarEmoji = state.avatarEmoji || "🍟";
+    const nickInput = $("editProfileNickInput");
+    if (nickInput) nickInput.value = state.nickname || "Player";
+
+    const customInput = $("editProfileCustomEmojiInput");
+    if (customInput) customInput.value = "";
+
+    renderEmojiPicker();
+    updateEditProfilePreview();
+
+    // Populate stats preservation review counts
+    const prof = getProfile(state.nickname);
+    const dayData = (state.dailyPlayers && state.dailyPlayers[state.nickname]) || {};
+    if ($("editProfileBingosCount")) $("editProfileBingosCount").textContent = (prof.totalBingos || 0) + (dayData.bingos || 0);
+    if ($("editProfileSquaresCount")) $("editProfileSquaresCount").textContent = `${dayData.squares || 0}/25`;
+    if ($("editProfileTrophiesCount")) $("editProfileTrophiesCount").textContent = (prof.unlockedTrophies || []).length;
+
+    $("editProfileModal").classList.remove("hidden");
+  }
+
+  function renderEmojiPicker() {
+    const grid = $("emojiPickerGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    AVATAR_EMOJIS.forEach(emoji => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emoji-choice-btn" + (emoji === selectedAvatarEmoji ? " selected" : "");
+      btn.textContent = emoji;
+      btn.onclick = () => {
+        selectedAvatarEmoji = emoji;
+        if ($("editProfileCustomEmojiInput")) $("editProfileCustomEmojiInput").value = "";
+        renderEmojiPicker();
+        updateEditProfilePreview();
+      };
+      grid.appendChild(btn);
+    });
+  }
+
+  function handleCustomEmojiInput(val) {
+    const trimmed = (val || "").trim();
+    if (trimmed) {
+      selectedAvatarEmoji = trimmed;
+      const btns = document.querySelectorAll(".emoji-choice-btn");
+      btns.forEach(b => b.classList.toggle("selected", b.textContent === selectedAvatarEmoji));
+      updateEditProfilePreview();
+    }
+  }
+
+  function updateEditProfilePreview() {
+    const preview = $("editProfilePreviewAvatar");
+    if (preview) preview.textContent = selectedAvatarEmoji || "🍟";
+  }
+
+  function handleSaveProfile() {
+    const nameInput = $("editProfileNickInput");
+    const rawName = nameInput ? nameInput.value.trim().slice(0, 24) : "";
+    const newNick = rawName || state.nickname || "Player";
+    const newEmoji = selectedAvatarEmoji || state.avatarEmoji || "🍟";
+    const oldNick = state.nickname || "Player";
+
+    // 1. If nickname changed, cleanly migrate profile and records while keeping all stats
+    if (newNick !== oldNick) {
+      if (!state.profiles) state.profiles = {};
+      const oldProf = state.profiles[oldNick] || {
+        unlockedTrophies: [],
+        counts: {},
+        totalBingos: 0,
+        fastestEverMs: 0,
+        gamesPlayed: 0
+      };
+
+      const existingNewProf = state.profiles[newNick];
+      if (existingNewProf) {
+        // Merge trophies, counts, bingos, fastest time, games played
+        const mergedTrophies = [...new Set([...(existingNewProf.unlockedTrophies || []), ...(oldProf.unlockedTrophies || [])])];
+        const mergedCounts = { ...(existingNewProf.counts || {}) };
+        for (const [k, v] of Object.entries(oldProf.counts || {})) {
+          mergedCounts[k] = (mergedCounts[k] || 0) + v;
+        }
+        state.profiles[newNick] = {
+          unlockedTrophies: mergedTrophies,
+          counts: mergedCounts,
+          totalBingos: (existingNewProf.totalBingos || 0) + (oldProf.totalBingos || 0),
+          fastestEverMs: Math.min(existingNewProf.fastestEverMs || Infinity, oldProf.fastestEverMs || Infinity) === Infinity ? 0 : Math.min(existingNewProf.fastestEverMs || Infinity, oldProf.fastestEverMs || Infinity),
+          gamesPlayed: (existingNewProf.gamesPlayed || 0) + (oldProf.gamesPlayed || 0),
+          avatarEmoji: newEmoji
+        };
+      } else {
+        state.profiles[newNick] = {
+          ...oldProf,
+          avatarEmoji: newEmoji
+        };
+      }
+      delete state.profiles[oldNick];
+
+      // 2. Migrate daily player stats
+      if (!state.dailyPlayers) state.dailyPlayers = {};
+      if (state.dailyPlayers[oldNick]) {
+        const oldDaily = state.dailyPlayers[oldNick];
+        state.dailyPlayers[newNick] = {
+          ...oldDaily,
+          nickname: newNick,
+          avatarEmoji: newEmoji
+        };
+        delete state.dailyPlayers[oldNick];
+      } else {
+        updateCurrentPlayerTodayStats(newNick, newEmoji);
+      }
+
+      // 3. Migrate daily leaderboard runs
+      if (Array.isArray(state.dailyLeaderboardRuns)) {
+        state.dailyLeaderboardRuns.forEach(r => {
+          if (r.nickname === oldNick) {
+            r.nickname = newNick;
+            r.avatarEmoji = newEmoji;
+          }
+        });
+      }
+
+      // 4. Update daily feed entries
+      if (Array.isArray(state.dailyFeed)) {
+        state.dailyFeed.forEach(f => {
+          if (f.user === oldNick) {
+            f.user = newNick;
+            f.avatar = newEmoji;
+          }
+        });
+      }
+
+      // 5. Broadcast rename event if cross-tab
+      broadcastEvent({
+        type: "rename",
+        oldNick: oldNick,
+        newNick: newNick,
+        avatar: newEmoji
+      });
+    } else {
+      // Nickname remained same, update avatar
+      if (state.profiles && state.profiles[newNick]) {
+        state.profiles[newNick].avatarEmoji = newEmoji;
+      }
+      if (state.dailyPlayers && state.dailyPlayers[newNick]) {
+        state.dailyPlayers[newNick].avatarEmoji = newEmoji;
+      }
+      if (Array.isArray(state.dailyLeaderboardRuns)) {
+        state.dailyLeaderboardRuns.forEach(r => {
+          if (r.nickname === newNick) {
+            r.avatarEmoji = newEmoji;
+          }
+        });
+      }
+      if (Array.isArray(state.dailyFeed)) {
+        state.dailyFeed.forEach(f => {
+          if (f.user === newNick) {
+            f.avatar = newEmoji;
+          }
+        });
+      }
+    }
+
+    state.nickname = newNick;
+    state.avatarEmoji = newEmoji;
+    updateCurrentPlayerTodayStats(newNick, newEmoji);
+    saveState();
+
+    renderHeader();
+    renderBoard();
+    renderLeaderboard();
+    renderFeed();
+    renderTrophiesWidget();
+    updateSettingsNavBadge();
+
+    handleCloseModal("editProfileModal");
+    showToast(newEmoji, "Profile Updated!", `Playing as ${newNick}`);
+  }
+
+  function handleOpenBragBoard() {
+    renderBragBoardGraphic();
+    $("bragActionStatus").textContent = "";
+    $("bragBoardModal").classList.remove("hidden");
+  }
+
+  function handleOpenSuggestModal() {
+    $("suggestPhraseInput").value = "";
+    $("suggestStatus").textContent = "";
+    $("suggestModal").classList.remove("hidden");
+  }
+
+  function handleOpenSettingsModal() {
+    updateSettingsNavBadge();
+    if (settingsUnlocked) {
+      $("settingsLockArea").classList.add("hidden");
+      $("settingsUnlockedArea").classList.remove("hidden");
+      renderSettingsManagerView();
+    } else {
+      $("settingsLockArea").classList.remove("hidden");
+      $("settingsUnlockedArea").classList.add("hidden");
+      $("settingsPinInput").value = "";
+      $("settingsLockStatus").textContent = "";
+      const pendingCount = (state.suggestions || []).filter(s => s && s.status === "pending").length;
+      const hintEl = $("settingsLockHint");
+      if (hintEl) {
+        hintEl.innerHTML = pendingCount > 0
+          ? `Enter the manager passcode to access controls. <strong style="color:var(--gold); display:block; margin-top:4px;">💡 ${pendingCount} pending suggestion${pendingCount === 1 ? "" : "s"} waiting for review!</strong>`
+          : `Enter the manager passcode to access controls.`;
+      }
+    }
+    $("settingsModal").classList.remove("hidden");
+  }
+
+  function handleOpenProfileModal(nickname) {
+    const targetNick = nickname || state.nickname || "Player";
+    const prof = getProfile(targetNick);
+    const dayData = (state.dailyPlayers && state.dailyPlayers[targetNick]) || {};
+    const avatar = (prof && prof.avatarEmoji) || (dayData && dayData.avatarEmoji) || (targetNick === state.nickname ? state.avatarEmoji : null) || "🍟";
+
+    $("profileModalTitle").textContent = targetNick === state.nickname ? "👤 Your Profile & Stats" : `👤 ${targetNick}'s Profile`;
+    $("profileModalName").textContent = targetNick;
+    if ($("profileModalAvatar")) $("profileModalAvatar").textContent = avatar;
+
+    const editBtn = $("profileModalEditBtn");
+    if (editBtn) {
+      editBtn.classList.toggle("hidden", targetNick !== state.nickname);
+    }
+
+    const clearStatsBtn = $("profileClearStatsBtn");
+    if (clearStatsBtn) {
+      clearStatsBtn.textContent = targetNick === state.nickname ? "🗑️ Clear My Lifetime Stats" : `🗑️ Clear ${targetNick}'s Stats`;
+    }
+
+    const badges = (prof.unlockedTrophies || []).map(id => {
+      const a = ACHIEVEMENTS.find(item => item.id === id);
+      return a ? a.emoji : "";
+    }).join("");
+    $("profileModalBadges").textContent = badges ? " " + badges : "";
+
+    $("profTodayBingos").textContent = dayData.bingos || 0;
+    $("profTodaySquares").textContent = `${dayData.squares || 0} / 25`;
+    const fastestMs = dayData.fastestMs || prof.fastestEverMs;
+    $("profFastestTime").textContent = fastestMs ? formatTime(fastestMs) : "—";
+
+    // Unlocked Trophies Grid
+    const grid = $("profileModalTrophies");
+    grid.innerHTML = "";
+    ACHIEVEMENTS.forEach(ach => {
+      const isUn = (prof.unlockedTrophies || []).includes(ach.id);
+      const card = document.createElement("div");
+      card.className = "trophy-card" + (isUn ? " unlocked" : "");
+      card.innerHTML = `
+        <div class="trophy-icon">${ach.emoji}</div>
+        <div class="trophy-name">${ach.name}</div>
+        <div class="trophy-count">${isUn ? `✓ ${prof.counts[ach.id] || 1}x` : "Locked"}</div>
+      `;
+      card.title = `${ach.name}: ${ach.desc}`;
+      card.onclick = () => {
+        const status = isUn ? `(Unlocked ${prof.counts[ach.id] || 1}x)` : "(Locked)";
+        showToast(ach.emoji, `${ach.name} ${status}`, `How to get: ${ach.desc}`);
+      };
+      grid.appendChild(card);
+    });
+
+    $("profileModal").classList.remove("hidden");
+  }
+
+  function handleCloseModal(modalId) {
+    const el = $(modalId);
+    if (el) el.classList.add("hidden");
+  }
+
+  function handleNewBoardPrompt() {
+    const modeName = (state.gameMode || "steve") === "steve" ? "Steve Mode" : "Everybody Mode";
+    openConfirmPrompt("New Board", `Generate a fresh randomized board for ${modeName}? Current marks will be cleared. (The other mode's board will be kept safe)`, () => {
+      generateFreshBoard(true);
+      showToast("🎲", "New Board", `Randomized 5x5 board ready for ${modeName}!`);
+    });
+  }
+
+  function handleResetMarksPrompt() {
+    const modeName = (state.gameMode || "steve") === "steve" ? "Steve Mode" : "Everybody Mode";
+    openConfirmPrompt("Clear Marks", `Clear all marks on ${modeName} board and restart timer? (The other mode's board will be kept safe)`, () => {
+      state.marked = Array(25).fill(false);
+      state.marked[12] = true; // center is free space
+      state.timerStartedAt = Date.now();
+      state.timerElapsedBefore = 0;
+      state.isCompleted = false;
+      state.bingosCount = 0;
+      state.linesCount = 0;
+      state.cardAchievements = []; // Reset per-card achievement limiter
+      syncStateToActiveMode();
+      startTimerTicker();
+      updateTimerDisplay();
+      updateCurrentPlayerTodayStats();
+      saveState();
+      renderBoard();
+      renderLeaderboard();
+      showToast("🔄", "Marks Cleared", `${modeName} marks reset and timer restarted.`);
+    });
+  }
+
+  function openConfirmPrompt(title, msg, onConfirm, isDanger = false) {
+    $("confirmTitle").textContent = title;
+    $("confirmMsg").textContent = msg;
+    const btn = $("confirmExecuteBtn");
+    btn.className = isDanger ? "danger" : "primary";
+    pendingConfirmAction = onConfirm;
+    $("confirmModal").classList.remove("hidden");
+  }
+
+  function handleExecuteConfirm() {
+    if (typeof pendingConfirmAction === "function") {
+      const action = pendingConfirmAction;
+      pendingConfirmAction = null;
+      action();
+    }
+    handleCloseModal("confirmModal");
+  }
+
+  function handleSwitchLeaderboard(tab) {
+    state.leaderboardTab = tab;
+    renderLeaderboard();
+  }
+
+  function showToast(icon, title, desc) {
+    $("toastIcon").textContent = icon;
+    $("toastMsg").textContent = `${title} ${desc ? "· " + desc : ""}`.trim();
+    const t = $("toastNotification");
+    t.classList.remove("hidden");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      t.classList.add("hidden");
+    }, 4200);
+  }
+
+  /* ============================================================ */
+  /* REAL-TIME MULTI-BROWSER & CROSS-DEVICE CLOUD SYNC ENGINE     */
+  /* High-Performance MQTT over Secure WebSockets (HiveMQ / EMQX) */
+  /* ============================================================ */
+  let mqttClient = null;
+  const seenEvents = new Set();
+  const pendingCloudQueue = [];
+  let heartbeatTimer = null;
+  let reconnectTimer = null;
+  let brokerAttempt = 0;
+
+  // Unified Primary Public Cloud WebSocket MQTT Broker (Port 8884 SSL)
+  // Shared by all clients so messages reliably bridge across phones, laptops, and tablets
+  const CLOUD_BROKER = { host: "broker.hivemq.com", port: 8884, path: "/mqtt", name: "HiveMQ" };
+
+  function getBaseTopic() {
+    const room = (state.roomCode || "default").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+    return "steve_bingo_v2/" + room;
+  }
+
+  function updateLiveStatus(status, text) {
+    const pill = $("liveSyncPill");
+    if (!pill) return;
+    const room = state.roomCode || "default";
+    if (status === "online") {
+      pill.className = "chip active";
+      pill.textContent = "🟢 Live Room: " + room;
+      pill.title = text || ("Connected to live multiplayer room: " + room);
+    } else if (status === "local") {
+      pill.className = "chip";
+      pill.textContent = "🟡 Tab sync active";
+      pill.title = text || "Local tab sync active (Cloud connecting...)";
+    } else {
+      pill.className = "chip";
+      pill.textContent = "🔴 Offline";
+      pill.title = text || "Offline";
+    }
+  }
+
+  function initBroadcast() {
+    // Read custom room from URL query if present (e.g. ?room=family)
+    try {
+      if (typeof window !== "undefined" && window.location && window.location.search) {
+        const params = new URLSearchParams(window.location.search);
+        const r = params.get("room");
+        if (r && r.trim()) {
+          state.roomCode = r.trim().slice(0, 32);
+        }
+      }
+    } catch (e) {}
+
+    if (!state.roomCode) state.roomCode = "default";
+    updateLiveStatus("online");
+
+    // 1. In-browser BroadcastChannel (instant zero-latency sync between tabs of same browser)
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        if (broadcastChan) {
+          try { broadcastChan.close(); } catch (e) {}
+        }
+        broadcastChan = new BroadcastChannel("steve_bingo_v2_room_" + state.roomCode);
+        broadcastChan.onmessage = e => {
+          if (e && e.data && e.data.clientId !== CLIENT_ID) {
+            handleIncomingBroadcast(e.data);
+          }
+        };
+      }
+    } catch (e) {}
+
+    // 2. Storage event listener (secondary tab sync fallback)
+    try {
+      window.addEventListener("storage", e => {
+        if (e.key === "steve_bingo_v2_sync_" + state.roomCode && e.newValue) {
+          try {
+            const data = JSON.parse(e.newValue);
+            if (data && data.clientId !== CLIENT_ID) {
+              handleIncomingBroadcast(data);
+            }
+          } catch (err) {}
+        }
+      });
+    } catch (e) {}
+
+    // 3. Connect to live cloud relay via Paho MQTT WebSocket
+    connectCloudRelay();
+
+    // 4. Start recurring presence heartbeat & state keeper (every 8 seconds)
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(sendPresenceHeartbeat, 8000);
+  }
+
+  function connectCloudRelay() {
+    if (typeof Paho === "undefined" || !Paho.MQTT || !Paho.MQTT.Client) {
+      // Paho script not loaded yet (or offline)
+      updateLiveStatus("local", "Local tab sync active");
+      setTimeout(() => {
+        if (typeof Paho !== "undefined" && Paho.MQTT && (!mqttClient || !mqttClient.isConnected())) {
+          connectCloudRelay();
+        }
+      }, 2500);
+      return;
+    }
+
+    try {
+      if (mqttClient && mqttClient.isConnected()) {
+        try { mqttClient.disconnect(); } catch (e) {}
+      }
+
+      const broker = CLOUD_BROKER;
+      const mqttClientId = "steve_" + Math.random().toString(36).slice(2, 10);
+      mqttClient = new Paho.MQTT.Client(broker.host, broker.port, broker.path, mqttClientId);
+
+      mqttClient.onConnectionLost = resp => {
+        updateLiveStatus("local", "Reconnecting to live room...");
+        scheduleReconnect();
+      };
+
+      mqttClient.onMessageArrived = msg => {
+        try {
+          const data = JSON.parse(msg.payloadString);
+          if (data && data.clientId !== CLIENT_ID) {
+            handleIncomingBroadcast(data);
+          }
+        } catch (err) {}
+      };
+
+      mqttClient.connect({
+        useSSL: true,
+        timeout: 5,
+        keepAliveInterval: 20,
+        cleanSession: true,
+        onSuccess: () => {
+          updateLiveStatus("online", "Connected to " + broker.name + " (" + state.roomCode + ")");
+          const baseTopic = getBaseTopic();
+
+          // Subscribe to all events and retained room snapshots
+          mqttClient.subscribe(baseTopic + "/#");
+
+          // Flush queued messages
+          while (pendingCloudQueue.length > 0) {
+            const item = pendingCloudQueue.shift();
+            sendMqtt(item.topic, item.payload, item.retained);
+          }
+
+          // If already checked in today, broadcast presence and publish room snapshot
+          if (state.playedToday) {
+            broadcastEvent({
+              type: "player_sync",
+              user: state.nickname,
+              avatar: state.avatarEmoji || "🍟",
+              squares: state.marked.filter(Boolean).length,
+              bingos: state.bingosCount || 0,
+              fastestMs: state.isCompleted ? getElapsedMs() : 0,
+              feed: (state.dailyFeed || []).slice(0, 15)
+            });
+            publishRoomSnapshot();
+          }
+
+          // Query any existing players in this room to sync newcomer immediately
+          broadcastEvent({
+            type: "presence_query",
+            user: state.nickname || "Anonymous"
+          });
+        },
+        onFailure: err => {
+          updateLiveStatus("local", "Reconnecting to live room...");
+          scheduleReconnect();
+        }
+      });
+    } catch (err) {
+      scheduleReconnect();
+    }
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      connectCloudRelay();
+    }, 4500);
+  }
+
+  function sendMqtt(subTopic, payload, retained = false) {
+    if (mqttClient && mqttClient.isConnected()) {
+      try {
+        const fullTopic = getBaseTopic() + "/" + subTopic;
+        const msg = new Paho.MQTT.Message(JSON.stringify(payload));
+        msg.destinationName = fullTopic;
+        msg.retained = !!retained;
+        msg.qos = 0;
+        mqttClient.send(msg);
+      } catch (e) {
+        pendingCloudQueue.push({ topic: subTopic, payload, retained });
+        if (pendingCloudQueue.length > 40) pendingCloudQueue.shift();
+      }
+    } else {
+      pendingCloudQueue.push({ topic: subTopic, payload, retained });
+      if (pendingCloudQueue.length > 40) pendingCloudQueue.shift();
+    }
+  }
+
+  function broadcastEvent(payload) {
+    const eventId = "ev_" + CLIENT_ID + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+    const msg = {
+      ...payload,
+      eventId: eventId,
+      clientId: CLIENT_ID,
+      room: state.roomCode || "default",
+      timestamp: Date.now()
+    };
+
+    seenEvents.add(eventId);
+    if (seenEvents.size > 500) {
+      const first = seenEvents.values().next().value;
+      seenEvents.delete(first);
+    }
+
+    // 1. In-browser BroadcastChannel (instant same-browser tab sync)
+    if (broadcastChan) {
+      try { broadcastChan.postMessage(msg); } catch (e) {}
+    }
+
+    // 2. Storage event fallback
+    try {
+      safeSet("steve_bingo_v2_sync_" + (state.roomCode || "default"), JSON.stringify(msg));
+    } catch (e) {}
+
+    // 3. Multi-browser Cloud Broadcast via MQTT
+    sendMqtt("events", msg, false);
+  }
+
+  function publishRoomSnapshot() {
+    const snapshot = {
+      type: "snapshot",
+      user: state.nickname || "Anonymous",
+      clientId: CLIENT_ID,
+      timestamp: Date.now(),
+      feedClearedAt: state.feedClearedAt || 0,
+      leaderboardClearedAt: state.leaderboardClearedAt || 0,
+      dailyPlayers: state.dailyPlayers || {},
+      dailyLeaderboardRuns: (state.dailyLeaderboardRuns || []).filter(r => (r.timestamp || 0) >= (state.leaderboardClearedAt || 0)).slice(0, 30),
+      dailyFeed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 30),
+      phrases: state.phrases || [...DEFAULT_PHRASES],
+      passcode: state.passcode || DEFAULT_PIN,
+      passcodeUpdatedAt: state.passcodeUpdatedAt || 0,
+      suggestions: (state.suggestions || []).slice(0, 50),
+      rejectedSuggestionIds: (state.rejectedSuggestionIds || []).slice(-150),
+      approvedSuggestionIds: (state.approvedSuggestionIds || []).slice(-150),
+      profiles: state.profiles || {}
+    };
+    sendMqtt("snapshot", snapshot, true);
+  }
+
+  function sendPresenceHeartbeat() {
+    if (state.playedToday && state.nickname) {
+      const myProf = getProfile(state.nickname);
+      broadcastEvent({
+        type: "player_sync",
+        user: state.nickname,
+        avatar: state.avatarEmoji || "🍟",
+        squares: state.marked.filter(Boolean).length,
+        bingos: state.bingosCount || 0,
+        fastestMs: state.isCompleted ? getElapsedMs() : (myProf.fastestEverMs || 0),
+        profile: {
+          unlockedTrophies: myProf.unlockedTrophies || [],
+          counts: myProf.counts || {},
+          totalBingos: myProf.totalBingos || 0,
+          fastestEverMs: myProf.fastestEverMs || 0,
+          gamesPlayed: myProf.gamesPlayed || 0,
+          avatarEmoji: state.avatarEmoji || "🍟"
+        },
+        isHeartbeat: true
+      });
+      // Heartbeat broadcasts presence; snapshots are published on mutating actions
+    }
+  }
+
+  function handleIncomingBroadcast(data) {
+    if (!data || !data.type) return;
+
+    // Deduplication check
+    const key = data.eventId || `${data.type}_${data.user}_${data.timestamp}`;
+    if (seenEvents.has(key)) return;
+    seenEvents.add(key);
+    if (seenEvents.size > 500) {
+      const first = seenEvents.values().next().value;
+      seenEvents.delete(first);
+    }
+
+    // Ingest any peer profile metadata (trophies, lifetime stats, avatar)
+    if (data.profile && data.user) {
+      if (!state.profiles) state.profiles = {};
+      const existing = state.profiles[data.user] || {
+        unlockedTrophies: [],
+        counts: {},
+        totalBingos: 0,
+        fastestEverMs: 0,
+        gamesPlayed: 0
+      };
+      const incomingTrophies = Array.isArray(data.profile.unlockedTrophies) ? data.profile.unlockedTrophies : [];
+      const mergedTrophies = [...new Set([...(existing.unlockedTrophies || []), ...incomingTrophies])];
+      const mergedCounts = { ...(existing.counts || {}), ...(data.profile.counts || {}) };
+      state.profiles[data.user] = {
+        ...existing,
+        ...data.profile,
+        unlockedTrophies: mergedTrophies,
+        counts: mergedCounts,
+        avatarEmoji: data.avatar || data.profile.avatarEmoji || existing.avatarEmoji || "🍟"
+      };
+      saveState();
+    }
+
+    // 0. RETAINED ROOM SNAPSHOT: Received when newcomer joins an existing active room
+    if (data.type === "snapshot") {
+      let changed = false;
+
+      // 1. Sync epoch clear timestamps
+      if (data.feedClearedAt && data.feedClearedAt > (state.feedClearedAt || 0)) {
+        state.feedClearedAt = data.feedClearedAt;
+        state.dailyFeed = (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= state.feedClearedAt);
+        renderFeed();
+      }
+      if (data.leaderboardClearedAt && data.leaderboardClearedAt > (state.leaderboardClearedAt || 0)) {
+        state.leaderboardClearedAt = data.leaderboardClearedAt;
+        state.dailyLeaderboardRuns = (state.dailyLeaderboardRuns || []).filter(r => (r.timestamp || 0) >= state.leaderboardClearedAt);
+        state.dailyPlayers = {};
+        changed = true;
+      }
+
+      // 2. Sync players & runs (respecting leaderboardClearedAt)
+      if (data.dailyPlayers && typeof data.dailyPlayers === "object") {
+        if (!state.dailyPlayers) state.dailyPlayers = {};
+        for (const [pName, pData] of Object.entries(data.dailyPlayers)) {
+          if (pName !== state.nickname) {
+            state.dailyPlayers[pName] = { ...(state.dailyPlayers[pName] || {}), ...pData };
+            changed = true;
+          }
+        }
+      }
+      if (Array.isArray(data.dailyLeaderboardRuns)) {
+        if (!state.dailyLeaderboardRuns) state.dailyLeaderboardRuns = [];
+        data.dailyLeaderboardRuns.forEach(r => {
+          if (r && r.id && (!r.timestamp || r.timestamp >= (state.leaderboardClearedAt || 0)) && !state.dailyLeaderboardRuns.some(x => x.id === r.id)) {
+            state.dailyLeaderboardRuns.push(r);
+            changed = true;
+          }
+        });
+      }
+
+      // 3. Sync live feed (respecting feedClearedAt)
+      if (Array.isArray(data.dailyFeed)) {
+        data.dailyFeed.forEach(fItem => {
+          if (fItem && fItem.message && (!fItem.timestamp || fItem.timestamp >= (state.feedClearedAt || 0))) {
+            addFeedItem(fItem);
+          }
+        });
+      }
+
+      // 4. Sync room phrase pool
+      if (Array.isArray(data.phrases) && data.phrases.length >= 24) {
+        state.phrases = [...data.phrases];
+        if (settingsUnlocked) renderSettingsManagerView();
+      }
+
+      // 5. Sync manager passcode (ONLY if newer or never set, prevents resetting to 0000)
+      if (data.passcode && typeof data.passcode === "string" && data.passcode.length >= 4) {
+        const updateTime = data.passcodeUpdatedAt || 0;
+        if (updateTime >= (state.passcodeUpdatedAt || 0)) {
+          state.passcode = data.passcode;
+          state.passcodeUpdatedAt = updateTime;
+        }
+      }
+
+      // 5b. Sync rejected & approved suggestion tombstones
+      if (Array.isArray(data.rejectedSuggestionIds)) {
+        if (!state.rejectedSuggestionIds) state.rejectedSuggestionIds = [];
+        data.rejectedSuggestionIds.forEach(id => {
+          if (!state.rejectedSuggestionIds.includes(id)) state.rejectedSuggestionIds.push(id);
+        });
+      }
+      if (Array.isArray(data.approvedSuggestionIds)) {
+        if (!state.approvedSuggestionIds) state.approvedSuggestionIds = [];
+        data.approvedSuggestionIds.forEach(id => {
+          if (!state.approvedSuggestionIds.includes(id)) state.approvedSuggestionIds.push(id);
+        });
+      }
+
+      // 6. Sync suggestions with one-way status protection
+      if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+        if (!state.suggestions) state.suggestions = [];
+        data.suggestions.forEach(s => {
+          if (s && s.id) {
+            const idx = state.suggestions.findIndex(x => x.id === s.id);
+            if (idx !== -1) {
+              state.suggestions[idx] = mergeSuggestion(state.suggestions[idx], s);
+            } else {
+              state.suggestions.push(mergeSuggestion(null, s));
+            }
+          }
+        });
+        updateSettingsNavBadge();
+        if (settingsUnlocked) renderSettingsManagerView();
+      }
+
+      // 7. Sync peer player profiles
+      if (data.profiles && typeof data.profiles === "object") {
+        if (!state.profiles) state.profiles = {};
+        for (const [pName, pProf] of Object.entries(data.profiles)) {
+          if (pName !== state.nickname) {
+            state.profiles[pName] = { ...(state.profiles[pName] || {}), ...pProf };
+          }
+        }
+      }
+
+      if (changed) {
+        renderLeaderboard();
+      }
+      saveState();
+      return;
+    }
+
+    // 0b. CLEAR LIVE FEED: Received when manager clears feed
+    if (data.type === "clear_feed") {
+      const clearTime = data.clearedAt || data.timestamp || Date.now();
+      state.feedClearedAt = Math.max(state.feedClearedAt || 0, clearTime);
+      state.dailyFeed = (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= state.feedClearedAt);
+      saveState();
+      renderFeed();
+      showToast("🧹", "Feed Cleared", "The live room feed was cleared by a manager.");
+      return;
+    }
+
+    // 0c. CLEAR LEADERBOARD: Received when manager clears leaderboard
+    if (data.type === "clear_leaderboard") {
+      const clearTime = data.clearedAt || data.timestamp || Date.now();
+      state.leaderboardClearedAt = Math.max(state.leaderboardClearedAt || 0, clearTime);
+      state.dailyLeaderboardRuns = (state.dailyLeaderboardRuns || []).filter(r => (r.timestamp || 0) >= state.leaderboardClearedAt);
+      state.dailyPlayers = {};
+      saveState();
+      renderLeaderboard();
+      showToast("🏆", "Leaderboard Cleared", "The room leaderboard was cleared by a manager.");
+      return;
+    }
+
+    // 0d. SETTINGS UPDATE: Synchronize word pool and passcode in real time
+    if (data.type === "settings_update") {
+      if (data.setting === "phrases" && Array.isArray(data.phrases) && data.phrases.length >= 24) {
+        const targetMode = data.mode || "steve";
+        if (!state.phrasePools) state.phrasePools = {};
+        state.phrasePools[targetMode] = [...data.phrases];
+        if (state.gameMode === targetMode) {
+          state.phrases = [...data.phrases];
+        }
+        saveState();
+        if (settingsUnlocked) renderSettingsManagerView();
+        showToast("📝", "Phrase Pool Updated", `${targetMode === "steve" ? "Steve" : "Everybody"} phrase pool updated to ${data.phrases.length} phrases.`);
+      }
+      if (data.setting === "passcode" && data.passcode) {
+        const updateTime = data.passcodeUpdatedAt || data.updatedAt || 0;
+        if (updateTime >= (state.passcodeUpdatedAt || 0)) {
+          state.passcode = String(data.passcode);
+          state.passcodeUpdatedAt = updateTime;
+          saveState();
+          if (settingsUnlocked) renderSettingsManagerView();
+          showToast("🔐", "Passcode Updated", "Manager passcode updated.");
+        }
+      }
+      return;
+    }
+
+    // Universal Feed Synchronization: merge incoming feed history on join/presence (skipped for heartbeats)
+    if (!data.isHeartbeat && Array.isArray(data.feed) && data.feed.length > 0) {
+      data.feed.forEach(fItem => {
+        if (fItem && fItem.message) {
+          addFeedItem(fItem);
+        }
+      });
+    }
+
+    // 1. JOIN EVENT: Another player joined today's match
+    if (data.type === "join" && data.user) {
+      const jId = data.joinId || `feed_join_${data.user}_${state.activeDayCycleId}`;
+      addFeedItem({
+        id: jId,
+        type: "join",
+        user: data.user,
+        avatar: data.avatar || "🍟",
+        message: "joined today's Steve Bingo match!",
+        tag: "JOIN",
+        timestamp: data.timestamp || Date.now()
+      });
+
+      if (!state.dailyPlayers) state.dailyPlayers = {};
+      state.dailyPlayers[data.user] = {
+        nickname: data.user,
+        avatarEmoji: data.avatar || "🍟",
+        squares: Number.isFinite(data.squares) ? data.squares : 1,
+        bingos: data.bingos || 0,
+        fastestMs: data.fastestMs || 0,
+        lastActive: data.timestamp || Date.now()
+      };
+      renderLeaderboard();
+
+      // Reply with our own player_sync AND full feed so newcomer's feed overlaps immediately
+      if (state.playedToday) {
+        broadcastEvent({
+          type: "presence_response",
+          user: state.nickname,
+          avatar: state.avatarEmoji || "🍟",
+          squares: state.marked.filter(Boolean).length,
+          bingos: state.bingosCount || 0,
+          fastestMs: state.isCompleted ? getElapsedMs() : 0,
+          feed: (state.dailyFeed || []).slice(0, 20)
+        });
+        publishRoomSnapshot();
+      }
+      return;
+    }
+
+    // 2. PRESENCE QUERY: New player asking for existing room roster & feed
+    if (data.type === "presence_query") {
+      if (state.playedToday) {
+        const myProf = getProfile(state.nickname);
+        broadcastEvent({
+          type: "presence_response",
+          user: state.nickname,
+          avatar: state.avatarEmoji || "🍟",
+          squares: state.marked.filter(Boolean).length,
+          bingos: state.bingosCount || 0,
+          fastestMs: state.isCompleted ? getElapsedMs() : (myProf.fastestEverMs || 0),
+          profile: {
+            unlockedTrophies: myProf.unlockedTrophies || [],
+            counts: myProf.counts || {},
+            totalBingos: myProf.totalBingos || 0,
+            fastestEverMs: myProf.fastestEverMs || 0,
+            gamesPlayed: myProf.gamesPlayed || 0,
+            avatarEmoji: state.avatarEmoji || "🍟"
+          },
+          suggestions: (state.suggestions || []).slice(0, 50),
+          feed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 20)
+        });
+        if (state.isCompleted && Array.isArray(state.dailyLeaderboardRuns)) {
+          state.dailyLeaderboardRuns.forEach(r => {
+            if (r.timestamp >= (state.leaderboardClearedAt || 0)) {
+              broadcastEvent({
+                type: "run_sync",
+                run: r
+              });
+            }
+          });
+        }
+      }
+      return;
+    }
+
+    // 2b. PRESENCE RESPONSE: Reply from existing player giving roster & feed
+    if (data.type === "presence_response" && data.user) {
+      if (!state.dailyPlayers) state.dailyPlayers = {};
+      state.dailyPlayers[data.user] = {
+        nickname: data.user,
+        avatarEmoji: data.avatar || "🍟",
+        squares: Number.isFinite(data.squares) ? data.squares : 1,
+        bingos: data.bingos || 0,
+        fastestMs: data.fastestMs || 0,
+        lastActive: data.timestamp || Date.now()
+      };
+      if (Array.isArray(data.suggestions)) {
+        if (!state.suggestions) state.suggestions = [];
+        data.suggestions.forEach(s => {
+          if (s && s.id) {
+            const idx = state.suggestions.findIndex(x => x.id === s.id);
+            if (idx !== -1) {
+              state.suggestions[idx] = mergeSuggestion(state.suggestions[idx], s);
+            } else {
+              state.suggestions.push(mergeSuggestion(null, s));
+            }
+          }
+        });
+        saveState();
+        updateSettingsNavBadge();
+        if (settingsUnlocked) renderSettingsManagerView();
+      }
+      renderLeaderboard();
+      return;
+    }
+
+    // 3. PLAYER UPDATE / SYNC: Real-time square progress, stats, and feed overlap
+    if ((data.type === "player_update" || data.type === "player_sync") && data.user) {
+      if (!state.dailyPlayers) state.dailyPlayers = {};
+      const prev = state.dailyPlayers[data.user] || {};
+      state.dailyPlayers[data.user] = {
+        nickname: data.user,
+        avatarEmoji: data.avatar || prev.avatarEmoji || "🍟",
+        squares: Number.isFinite(data.squares) ? data.squares : (prev.squares || 1),
+        bingos: Number.isFinite(data.bingos) ? data.bingos : (prev.bingos || 0),
+        fastestMs: data.fastestMs || prev.fastestMs || 0,
+        lastActive: data.timestamp || Date.now()
+      };
+      renderLeaderboard();
+      return;
+    }
+
+    // 3b. DIRECT FEED EVENT: Milestone square marks or announcements
+    if (data.type === "feed_event" && data.item) {
+      addFeedItem(data.item);
+      return;
+    }
+
+    // 4. RUN SYNC: Historical completed run sent to new joiners
+    if (data.type === "run_sync" && data.run) {
+      const r = data.run;
+      if (r && r.timestamp && r.timestamp < (state.leaderboardClearedAt || 0)) {
+        return; // Discard run older than leaderboard clear!
+      }
+      if (!state.dailyLeaderboardRuns) state.dailyLeaderboardRuns = [];
+      if (!state.dailyLeaderboardRuns.some(item => item.id === r.id)) {
+        state.dailyLeaderboardRuns.push(r);
+        renderLeaderboard();
+      }
+      return;
+    }
+
+    // 5. BINGO EVENT: Another player hit a bingo!
+    if (data.type === "bingo" && data.run) {
+      const r = data.run;
+      if (!state.dailyLeaderboardRuns) state.dailyLeaderboardRuns = [];
+      if (!state.dailyLeaderboardRuns.some(item => item.id === r.id)) {
+        state.dailyLeaderboardRuns.push(r);
+        renderLeaderboard();
+      }
+
+      if (!state.dailyPlayers) state.dailyPlayers = {};
+      if (state.dailyPlayers[r.nickname]) {
+        state.dailyPlayers[r.nickname].bingos = (state.dailyPlayers[r.nickname].bingos || 0) + 1;
+        state.dailyPlayers[r.nickname].fastestMs = r.timeMs;
+      } else {
+        state.dailyPlayers[r.nickname] = {
+          nickname: r.nickname,
+          avatarEmoji: data.avatar || r.avatarEmoji || "🍟",
+          squares: r.squares || 5,
+          bingos: 1,
+          fastestMs: r.timeMs,
+          lastActive: Date.now()
+        };
+      }
+      renderLeaderboard();
+
+      addFeedItem({
+        id: "feed_" + Date.now() + "_" + r.nickname,
+        type: "bingo",
+        user: r.nickname,
+        avatar: data.avatar || r.avatarEmoji || "🍟",
+        message: `scored a BINGO (${r.lines} lines in ${r.timeFormatted})!`,
+        tag: "BINGO!",
+        timestamp: Date.now()
+      });
+      fireConfetti(3500);
+      showToast("🎉", `${r.nickname} got a BINGO!`, `${r.lines} lines in ${r.timeFormatted}`);
+      return;
+    }
+
+    // 6. ACHIEVEMENT UNLOCK: Another player unlocked a trophy
+    if (data.type === "achievement") {
+      const ach = data.achievement || ACHIEVEMENTS.find(a => a.id === data.achievementId);
+      const achId = data.achievementId || (ach ? ach.id : "trophy");
+      const feedId = data.id || `ach_${data.user}_${achId}_${state.activeDayCycleId}`;
+      addFeedItem({
+        id: feedId,
+        type: "achievement",
+        user: data.user,
+        avatar: data.avatar || "🍟",
+        message: data.message || (ach ? `unlocked ${ach.emoji} ${ach.name}!` : "unlocked a trophy!"),
+        tag: "ACHIEVEMENT",
+        timestamp: data.timestamp || Date.now()
+      });
+      return;
+    }
+
+    // 6b. RESET SINGLE DAILY ACCOUNT
+    if (data.type === "reset_single_daily_account" && data.targetNick) {
+      if (state.dailyPlayers && state.dailyPlayers[data.targetNick]) {
+        delete state.dailyPlayers[data.targetNick];
+      }
+      if (Array.isArray(state.dailyLeaderboardRuns)) {
+        state.dailyLeaderboardRuns = state.dailyLeaderboardRuns.filter(r => r.nickname !== data.targetNick);
+      }
+      if (data.targetNick === state.nickname) {
+        state.playedToday = false;
+        state.bingosCount = 0;
+        state.linesCount = 0;
+        state.marked = Array(25).fill(false);
+        state.marked[12] = true;
+        state.timerStartedAt = null;
+        state.timerElapsedBefore = 0;
+        state.isCompleted = false;
+        state.cardAchievements = [];
+        stopTimerTicker();
+        updateTimerDisplay();
+        renderBoard();
+        showDailyGate();
+        showToast("⚠️", "Session Reset", "Your account for today was reset by a manager.");
+      }
+      saveState();
+      renderLeaderboard();
+      if (settingsUnlocked) renderSettingsManagerView();
+      return;
+    }
+
+    // 6c. RESET ALL DAILY ACCOUNTS
+    if (data.type === "reset_all_daily_accounts") {
+      state.dailyPlayers = {};
+      state.dailyLeaderboardRuns = [];
+      state.playedToday = false;
+      state.bingosCount = 0;
+      state.linesCount = 0;
+      state.marked = Array(25).fill(false);
+      state.marked[12] = true;
+      state.timerStartedAt = null;
+      state.timerElapsedBefore = 0;
+      state.isCompleted = false;
+      state.cardAchievements = [];
+      stopTimerTicker();
+      updateTimerDisplay();
+      saveState();
+      renderBoard();
+      renderLeaderboard();
+      if (settingsUnlocked) renderSettingsManagerView();
+      showDailyGate();
+      showToast("👥", "All Accounts Reset", "Today's match was reset by a manager.");
+      return;
+    }
+
+    // 6d. CLEAR PLAYER LIFETIME STATS
+    if (data.type === "clear_player_lifetime_stats" && data.targetNick) {
+      if (!state.profiles) state.profiles = {};
+      const currentAvatar = (state.profiles[data.targetNick]?.avatarEmoji) || "🍟";
+      state.profiles[data.targetNick] = {
+        unlockedTrophies: [],
+        counts: {},
+        totalBingos: 0,
+        fastestEverMs: 0,
+        gamesPlayed: 0,
+        avatarEmoji: currentAvatar
+      };
+      if (data.targetNick === state.nickname) {
+        state.cardAchievements = [];
+        renderTrophiesWidget();
+        showToast("🗑️", "Stats Cleared", "Your lifetime stats were cleared.");
+      }
+      saveState();
+      renderHeader();
+      renderLeaderboard();
+      if (settingsUnlocked) renderSettingsManagerView();
+      return;
+    }
+
+    // 7. RENAME EVENT: Player updated profile name/avatar
+    if (data.type === "rename" && data.oldNick && data.newNick) {
+      if (state.dailyPlayers && state.dailyPlayers[data.oldNick]) {
+        state.dailyPlayers[data.newNick] = {
+          ...state.dailyPlayers[data.oldNick],
+          nickname: data.newNick,
+          avatarEmoji: data.avatar || "🍟"
+        };
+        delete state.dailyPlayers[data.oldNick];
+      }
+      if (Array.isArray(state.dailyLeaderboardRuns)) {
+        state.dailyLeaderboardRuns.forEach(r => {
+          if (r.nickname === data.oldNick) {
+            r.nickname = data.newNick;
+            r.avatarEmoji = data.avatar || "🍟";
+          }
+        });
+      }
+      if (Array.isArray(state.dailyFeed)) {
+        state.dailyFeed.forEach(f => {
+          if (f.user === data.oldNick) {
+            f.user = data.newNick;
+            f.avatar = data.avatar || "🍟";
+          }
+        });
+      }
+      if (Array.isArray(state.suggestions)) {
+        state.suggestions.forEach(s => {
+          if (s.suggestedBy === data.oldNick) {
+            s.suggestedBy = data.newNick;
+          }
+        });
+      }
+      renderLeaderboard();
+      renderFeed();
+      return;
+    }
+
+    // 8a. DEDICATED SUGGESTIONS SYNC (Delivered via retained subtopic upon connect or update)
+    if (data.type === "suggestions_sync" && Array.isArray(data.suggestions)) {
+      if (!state.suggestions) state.suggestions = [];
+      if (Array.isArray(data.rejectedSuggestionIds)) {
+        if (!state.rejectedSuggestionIds) state.rejectedSuggestionIds = [];
+        data.rejectedSuggestionIds.forEach(id => {
+          if (!state.rejectedSuggestionIds.includes(id)) state.rejectedSuggestionIds.push(id);
+        });
+      }
+      if (Array.isArray(data.approvedSuggestionIds)) {
+        if (!state.approvedSuggestionIds) state.approvedSuggestionIds = [];
+        data.approvedSuggestionIds.forEach(id => {
+          if (!state.approvedSuggestionIds.includes(id)) state.approvedSuggestionIds.push(id);
+        });
+      }
+      data.suggestions.forEach(incoming => {
+        if (!incoming || !incoming.id) return;
+        const existingIdx = state.suggestions.findIndex(x => x.id === incoming.id);
+        if (existingIdx !== -1) {
+          state.suggestions[existingIdx] = mergeSuggestion(state.suggestions[existingIdx], incoming);
+        } else {
+          state.suggestions.push(mergeSuggestion(null, incoming));
+        }
+      });
+      state.suggestions.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      state.suggestions = state.suggestions.slice(0, 150);
+      saveState();
+      updateSettingsNavBadge();
+      if (settingsUnlocked) renderSettingsManagerView();
+      return;
+    }
+
+    // 8b. REAL-TIME SUGGESTION SUBMITTED
+    if ((data.type === "suggestion_submitted" || data.type === "suggestion") && data.suggestion) {
+      if (!state.suggestions) state.suggestions = [];
+      const incoming = data.suggestion;
+      if (incoming && incoming.id) {
+        const existingIdx = state.suggestions.findIndex(x => x.id === incoming.id);
+        if (existingIdx !== -1) {
+          state.suggestions[existingIdx] = mergeSuggestion(state.suggestions[existingIdx], incoming);
+        } else {
+          state.suggestions.unshift(mergeSuggestion(null, incoming));
+          state.suggestions = state.suggestions.slice(0, 150);
+        }
+        saveState();
+        updateSettingsNavBadge();
+        if (settingsUnlocked) renderSettingsManagerView();
+        showToast("💡", "New Suggestion!", `"${incoming.text}" by ${incoming.suggestedBy || "Anonymous"}`);
+      }
+      return;
+    }
+
+    // 9. REAL-TIME SUGGESTION STATUS (APPROVED / REJECTED)
+    if ((data.type === "suggestion_status" || data.type === "suggestion_approved" || data.type === "suggestion_rejected") && data.id) {
+      if (!state.suggestions) state.suggestions = [];
+      const status = data.status || (data.type === "suggestion_approved" ? "approved" : "rejected");
+      if (status === "rejected") {
+        if (!state.rejectedSuggestionIds) state.rejectedSuggestionIds = [];
+        if (!state.rejectedSuggestionIds.includes(data.id)) state.rejectedSuggestionIds.push(data.id);
+      } else if (status === "approved") {
+        if (!state.approvedSuggestionIds) state.approvedSuggestionIds = [];
+        if (!state.approvedSuggestionIds.includes(data.id)) state.approvedSuggestionIds.push(data.id);
+      }
+      if (Array.isArray(data.rejectedSuggestionIds)) {
+        if (!state.rejectedSuggestionIds) state.rejectedSuggestionIds = [];
+        data.rejectedSuggestionIds.forEach(id => {
+          if (!state.rejectedSuggestionIds.includes(id)) state.rejectedSuggestionIds.push(id);
+        });
+      }
+      if (Array.isArray(data.approvedSuggestionIds)) {
+        if (!state.approvedSuggestionIds) state.approvedSuggestionIds = [];
+        data.approvedSuggestionIds.forEach(id => {
+          if (!state.approvedSuggestionIds.includes(id)) state.approvedSuggestionIds.push(id);
+        });
+      }
+      const s = state.suggestions.find(x => x.id === data.id);
+      if (s) {
+        s.status = status;
+      }
+      if (status === "approved") {
+        const phrase = data.phrase || (s ? s.text : "");
+        if (phrase && !state.phrases.some(p => p.toLowerCase() === phrase.toLowerCase())) {
+          state.phrases.push(phrase);
+        }
+        if ((data.author && data.author === state.nickname) || (s && s.suggestedBy === state.nickname)) {
+          unlockAchievement("crowd_pleaser", state.nickname);
+        }
+        showToast("💡", "Suggestion Approved", `Added "${phrase}" to phrase pool.`);
+      }
+      saveState();
+      updateSettingsNavBadge();
+      if (settingsUnlocked) renderSettingsManagerView();
+      return;
+    }
+  }
+
+  /* ============================================================ */
+  /* GLOBAL EXPORTS (For safe inline onclick attributes)          */
+  /* ============================================================ */
+  window.handleSquareClick = handleSquareClick;
+  window.handleConfirmPlayToday = handleConfirmPlayToday;
+  window.handleOpenBragBoard = handleOpenBragBoard;
+  window.handleOpenSuggestModal = handleOpenSuggestModal;
+  window.handleOpenSettingsModal = handleOpenSettingsModal;
+  window.handleOpenProfileModal = handleOpenProfileModal;
+  window.handleOpenEditProfileModal = handleOpenEditProfileModal;
+  window.handleSaveProfile = handleSaveProfile;
+  window.handleCustomEmojiInput = handleCustomEmojiInput;
+  window.handleCloseModal = handleCloseModal;
+  window.handleNewBoardPrompt = handleNewBoardPrompt;
+  window.handleResetMarksPrompt = handleResetMarksPrompt;
+  window.handleExecuteConfirm = handleExecuteConfirm;
+  window.handleSwitchLeaderboard = handleSwitchLeaderboard;
+  window.handleSubmitSuggestion = handleSubmitSuggestion;
+  window.handleUnlockSettings = handleUnlockSettings;
+  window.handleLockSettings = handleLockSettings;
+  window.handleSavePhrasesAction = handleSavePhrasesAction;
+  window.handleRestoreDefaultPhrases = handleRestoreDefaultPhrases;
+  window.handleSaveNewPasscode = handleSaveNewPasscode;
+  window.handleClearFeedAction = handleClearFeedAction;
+  window.handleClearLeaderboardAction = handleClearLeaderboardAction;
+  window.handleDownloadBragPng = handleDownloadBragPng;
+  window.handleCopyBragText = handleCopyBragText;
+  window.handleResetSingleDailyAccountAction = handleResetSingleDailyAccountAction;
+  window.handleResetAllDailyAccountsAction = handleResetAllDailyAccountsAction;
+  window.handleClearPlayerLifetimeStatsAction = handleClearPlayerLifetimeStatsAction;
+  window.handleClearCurrentProfileStats = handleClearCurrentProfileStats;
+  window.handleSwitchMode = handleSwitchMode;
+  window.handleSwitchSettingsPhrasePool = handleSwitchSettingsPhrasePool;
+
+  // Global Keyboard shortcuts & modal dismissal
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      document.querySelectorAll(".modal-overlay").forEach(m => {
+        if (m.id !== "dailyGateModal" || state.playedToday) {
+          m.classList.add("hidden");
+        }
+      });
+    }
+  });
+
   
+  // Ensure state is flushed to storage when closing tab, minimizing, or navigating away
+  window.addEventListener("beforeunload", () => { saveState(); });
+  window.addEventListener("pagehide", () => { saveState(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      saveState();
+    } else if (document.visibilityState === "visible") {
+      // Instantly wake MQTT on mobile tab switch or unlock
+      if (!mqttClient || !mqttClient.isConnected()) {
+        connectCloudRelay();
+      }
+    }
+  });
+  window.addEventListener("online", () => {
+    if (!mqttClient || !mqttClient.isConnected()) {
+      connectCloudRelay();
+    }
+  });
+
+  // Start app on DOM ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", loadState);
+  } else {
+    loadState();
+  }
+})();
+</script>
+</body>
+</html>

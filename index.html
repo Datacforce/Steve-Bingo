@@ -918,7 +918,14 @@ input:focus, textarea:focus, button:focus-visible {
       <h3 id="suggestTitle">💡 Suggest a Square</h3>
       <button class="small-btn" type="button" onclick="handleCloseModal('suggestModal')">✕</button>
     </div>
-    <p class="feed-meta" style="margin:0;">Have a great idea for a Steve Bingo tile? Submit it for manager review!</p>
+    <p class="feed-meta" style="margin:0;">Have a great idea for a Steve Bingo tile? Choose which prompt pool you want to submit it to, and send it for manager review!</p>
+    <div>
+      <label style="font-size:0.82rem; color:var(--muted); display:block; margin-bottom:6px;">Choose Prompt Pool</label>
+      <div class="mode-toggle-pill" role="radiogroup" aria-label="Target phrase pool" style="width:100%; justify-content:center; padding:4px;">
+        <button id="suggestModeSteveBtn" class="mode-tab-btn active steve" type="button" onclick="handleSelectSuggestMode('steve')" style="flex:1; text-align:center;">🍟 Steve Mode</button>
+        <button id="suggestModeEverybodyBtn" class="mode-tab-btn" type="button" onclick="handleSelectSuggestMode('everybody')" style="flex:1; text-align:center;">👥 Everybody Mode</button>
+      </div>
+    </div>
     <div>
       <label for="suggestPhraseInput" style="font-size:0.82rem; color:var(--muted); display:block; margin-bottom:4px;">Your idea</label>
       <input id="suggestPhraseInput" maxlength="90" placeholder="e.g. Someone mentions cold pizza" onkeydown="if(event.key==='Enter')handleSubmitSuggestion()">
@@ -1039,6 +1046,28 @@ input:focus, textarea:focus, button:focus-visible {
       <button type="button" onclick="handleCloseModal('confirmModal')">Cancel</button>
       <button id="confirmExecuteBtn" class="primary" type="button" onclick="handleExecuteConfirm()">Confirm</button>
     </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MODAL: MANAGER PASSCODE AUTHENTICATION                      -->
+<!-- ============================================================ -->
+<div id="managerAuthModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="managerAuthTitle">
+  <div class="modal-window" style="max-width:420px;">
+    <div class="modal-head">
+      <h3 id="managerAuthTitle">🔒 Manager Passcode Required</h3>
+      <button class="small-btn" type="button" onclick="handleCloseModal('managerAuthModal')">✕</button>
+    </div>
+    <p id="managerAuthDesc" style="margin:0; color:var(--muted); font-size:0.92rem;">Enter the manager passcode to clear lifetime stats.</p>
+    <div>
+      <label for="managerAuthPinInput" style="font-size:0.82rem; color:var(--muted); display:block; margin-bottom:4px;">Manager Passcode</label>
+      <input id="managerAuthPinInput" type="password" inputmode="numeric" maxlength="16" placeholder="Enter PIN" onkeydown="if(event.key==='Enter')handleExecuteManagerAuth()">
+    </div>
+    <div class="modal-actions">
+      <button type="button" onclick="handleCloseModal('managerAuthModal')">Cancel</button>
+      <button id="managerAuthConfirmBtn" class="danger" type="button" onclick="handleExecuteManagerAuth()">Authorize & Clear</button>
+    </div>
+    <p id="managerAuthStatus" class="feed-meta" style="color:var(--danger); min-height:1.2em; margin:0; text-align:center;"></p>
   </div>
 </div>
 
@@ -2728,6 +2757,7 @@ input:focus, textarea:focus, button:focus-visible {
   function mergeSuggestion(existing, incoming) {
     if (!existing) {
       const copy = { ...incoming };
+      copy.targetMode = incoming.targetMode || "steve";
       if (state.rejectedSuggestionIds && state.rejectedSuggestionIds.includes(copy.id)) {
         copy.status = "rejected";
       } else if (state.approvedSuggestionIds && state.approvedSuggestionIds.includes(copy.id)) {
@@ -2783,52 +2813,76 @@ input:focus, textarea:focus, button:focus-visible {
     sendMqtt("suggestions", payload, true);
   }
 
-  /* SUGGESTION FEATURE                                           */
+  /* SUGGESTION FEATURE & MODE ROUTING                            */
   /* ============================================================ */
+  let suggestTargetMode = "steve";
+
+  function handleSelectSuggestMode(mode) {
+    suggestTargetMode = mode === "everybody" ? "everybody" : "steve";
+    const sBtn = $("suggestModeSteveBtn");
+    const eBtn = $("suggestModeEverybodyBtn");
+    const isSteve = suggestTargetMode === "steve";
+    if (sBtn) sBtn.className = "mode-tab-btn" + (isSteve ? " active steve" : "");
+    if (eBtn) eBtn.className = "mode-tab-btn" + (!isSteve ? " active everybody" : "");
+  }
+
   function handleSubmitSuggestion() {
     const input = $("suggestPhraseInput");
     const text = input ? input.value.trim() : "";
     const statusEl = $("suggestStatus");
+    const targetMode = suggestTargetMode || state.gameMode || "steve";
 
     if (!text || text.length < 3) {
-      statusEl.textContent = "Please enter an idea with at least 3 characters.";
+      if (statusEl) statusEl.textContent = "Please enter an idea with at least 3 characters.";
       return;
     }
 
-    if (state.suggestions.some(s => s.text.toLowerCase() === text.toLowerCase() && s.status === "pending")) {
-      statusEl.textContent = "That suggestion is already waiting for manager review.";
+    if (state.suggestions.some(s => s.text.toLowerCase() === text.toLowerCase() && s.targetMode === targetMode && s.status === "pending")) {
+      const modeLabel = targetMode === "steve" ? "Steve Mode" : "Everybody Mode";
+      if (statusEl) statusEl.textContent = `That suggestion is already waiting for manager review for ${modeLabel}.`;
       return;
     }
 
     const newSug = {
       id: "sug_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
       text: text.slice(0, 100),
+      targetMode: targetMode,
       suggestedBy: state.nickname || "Player",
       date: new Date().toISOString(),
       status: "pending"
     };
 
+    if (!Array.isArray(state.suggestions)) state.suggestions = [];
     state.suggestions.unshift(newSug);
     state.suggestions = state.suggestions.slice(0, 150);
     saveState();
 
     updateSettingsNavBadge();
 
-    // 1. Publish dedicated retained suggestions sync so newcomers get it immediately
-    publishSuggestionsSync();
-
-    // 2. Broadcast real-time suggestion submitted event across active browsers
+    // 1. Broadcast real-time suggestion submitted event across active browsers
     broadcastEvent({
       type: "suggestion_submitted",
       suggestion: newSug
     });
 
-    // 3. Update room snapshot
+    // 2. Broadcast complete suggestions sync so all devices receive it guaranteed
+    broadcastEvent({
+      type: "suggestions_sync",
+      suggestions: state.suggestions,
+      rejectedSuggestionIds: (state.rejectedSuggestionIds || []).slice(-150),
+      approvedSuggestionIds: (state.approvedSuggestionIds || []).slice(-150)
+    });
+
+    // 3. Publish dedicated retained suggestions sync for late joiners
+    publishSuggestionsSync();
+
+    // 4. Update room snapshot
     publishRoomSnapshot();
 
     if (input) input.value = "";
-    statusEl.textContent = "✓ Idea submitted for manager review. Thank you!";
-    showToast("💡", "Suggestion Sent!", "Your square idea was submitted to the manager.");
+    const modeLabel = targetMode === "steve" ? "Steve Mode" : "Everybody Mode";
+    if (statusEl) statusEl.textContent = `✓ Idea submitted for ${modeLabel} review! Thank you!`;
+    showToast("💡", "Suggestion Sent!", `"${newSug.text}" submitted for ${modeLabel}.`);
     setTimeout(() => handleCloseModal("suggestModal"), 1600);
   }
 
@@ -2883,8 +2937,13 @@ input:focus, textarea:focus, button:focus-visible {
         item.style.alignItems = "center";
         item.style.gap = "8px";
 
+        const sugMode = s.targetMode || "steve";
+        const modeBadge = sugMode === "everybody"
+          ? `<span class="chip" style="font-size:0.70rem; padding:2px 7px; border-color:var(--accent2); color:var(--accent2); margin-right:6px;">👥 Everybody</span>`
+          : `<span class="chip" style="font-size:0.70rem; padding:2px 7px; border-color:var(--accent); color:var(--accent); margin-right:6px;">🍟 Steve</span>`;
+
         const textDiv = document.createElement("div");
-        textDiv.innerHTML = `<strong>${s.text}</strong> <small class="feed-meta">by ${s.suggestedBy}</small>`;
+        textDiv.innerHTML = `${modeBadge}<strong>${s.text}</strong> <small class="feed-meta">by ${s.suggestedBy}</small>`;
 
         const acts = document.createElement("div");
         acts.style.display = "flex";
@@ -2895,33 +2954,63 @@ input:focus, textarea:focus, button:focus-visible {
         acceptBtn.textContent = "Accept";
         acceptBtn.onclick = () => {
           s.status = "approved";
+          const targetMode = s.targetMode || "steve";
+
           if (!state.approvedSuggestionIds) state.approvedSuggestionIds = [];
           if (!state.approvedSuggestionIds.includes(s.id)) {
             state.approvedSuggestionIds.push(s.id);
           }
-          if (!state.phrases.some(p => p.toLowerCase() === s.text.toLowerCase())) {
-            state.phrases.push(s.text);
+
+          // 1. Add directly to target phrase pool
+          if (!state.phrasePools) {
+            state.phrasePools = {
+              steve: [...DEFAULT_STEVE_PHRASES],
+              everybody: [...DEFAULT_EVERYBODY_PHRASES]
+            };
           }
+          if (!Array.isArray(state.phrasePools[targetMode])) {
+            state.phrasePools[targetMode] = targetMode === "steve" ? [...DEFAULT_STEVE_PHRASES] : [...DEFAULT_EVERYBODY_PHRASES];
+          }
+          if (!state.phrasePools[targetMode].some(p => p.toLowerCase() === s.text.toLowerCase())) {
+            state.phrasePools[targetMode].push(s.text);
+          }
+
+          // 2. If target mode is currently active, also add to active state.phrases
+          if (state.gameMode === targetMode) {
+            if (!state.phrases.some(p => p.toLowerCase() === s.text.toLowerCase())) {
+              state.phrases.push(s.text);
+            }
+          }
+
           unlockAchievement("crowd_pleaser", s.suggestedBy);
           saveState();
           renderSettingsManagerView();
           updateSettingsNavBadge();
-          showToast("✓", "Accepted!", `Added "${s.text}" to active phrase pool.`);
 
-          publishSuggestionsSync();
+          const modeLabel = targetMode === "steve" ? "Steve Prompts" : "Everybody Prompts";
+          showToast("✓", "Accepted!", `Added "${s.text}" to ${modeLabel} pool.`);
+
+          // 3. Broadcast status to all connected devices
           broadcastEvent({
             type: "suggestion_status",
             id: s.id,
             status: "approved",
             phrase: s.text,
+            targetMode: targetMode,
             author: s.suggestedBy,
             approvedSuggestionIds: state.approvedSuggestionIds
           });
+
+          // 4. Broadcast updated phrase pool for this specific mode
           broadcastEvent({
             type: "settings_update",
             setting: "phrases",
-            phrases: state.phrases
+            mode: targetMode,
+            phrases: state.phrasePools[targetMode]
           });
+
+          // 5. Update retained suggestions sync & room snapshot
+          publishSuggestionsSync();
           publishRoomSnapshot();
         };
 
@@ -2945,6 +3034,7 @@ input:focus, textarea:focus, button:focus-visible {
             id: s.id,
             status: "rejected",
             phrase: s.text,
+            targetMode: s.targetMode || "steve",
             author: s.suggestedBy,
             rejectedSuggestionIds: state.rejectedSuggestionIds
           });
@@ -3150,10 +3240,52 @@ input:focus, textarea:focus, button:focus-visible {
     }, true);
   }
 
+  let pendingManagerAuthAction = null;
+
+  function openManagerAuthPrompt(title, desc, onAuthSuccess) {
+    const titleEl = $("managerAuthTitle");
+    if (titleEl) titleEl.textContent = title || "🔒 Manager Passcode Required";
+    const descEl = $("managerAuthDesc");
+    if (descEl) descEl.textContent = desc || "Enter the manager passcode to authorize this action.";
+    const pin = $("managerAuthPinInput");
+    if (pin) pin.value = "";
+    const status = $("managerAuthStatus");
+    if (status) status.textContent = "";
+    pendingManagerAuthAction = onAuthSuccess;
+    $("managerAuthModal").classList.remove("hidden");
+    setTimeout(() => {
+      if (pin) pin.focus();
+    }, 100);
+  }
+
+  function handleExecuteManagerAuth() {
+    const entered = ($("managerAuthPinInput").value || "").trim();
+    const correct = state.passcode || DEFAULT_PIN;
+    const statusEl = $("managerAuthStatus");
+
+    if (entered === correct) {
+      const action = pendingManagerAuthAction;
+      pendingManagerAuthAction = null;
+      handleCloseModal("managerAuthModal");
+      if (typeof action === "function") {
+        action();
+      }
+    } else {
+      if (statusEl) statusEl.textContent = "Incorrect passcode. Access denied.";
+      $("managerAuthPinInput").value = "";
+    }
+  }
+
   function handleClearCurrentProfileStats() {
     const targetNick = $("profileModalName") ? $("profileModalName").textContent.trim() : state.nickname;
-    handleClearPlayerLifetimeStatsAction(targetNick);
     handleCloseModal("profileModal");
+    openManagerAuthPrompt(
+      "🔒 Clear Lifetime Stats",
+      `Clearing lifetime stats for "${targetNick}" will permanently delete all total bingos, fastest records, and unlocked trophies. Enter manager passcode to confirm:`,
+      () => {
+        handleClearPlayerLifetimeStatsAction(targetNick);
+      }
+    );
   }
 
   function handleSwitchSettingsPhrasePool(mode) {
@@ -3549,8 +3681,12 @@ input:focus, textarea:focus, button:focus-visible {
   }
 
   function handleOpenSuggestModal() {
-    $("suggestPhraseInput").value = "";
-    $("suggestStatus").textContent = "";
+    suggestTargetMode = state.gameMode || "steve";
+    handleSelectSuggestMode(suggestTargetMode);
+    const input = $("suggestPhraseInput");
+    if (input) input.value = "";
+    const status = $("suggestStatus");
+    if (status) status.textContent = "";
     $("suggestModal").classList.remove("hidden");
   }
 
@@ -3941,6 +4077,10 @@ input:focus, textarea:focus, button:focus-visible {
       dailyLeaderboardRuns: (state.dailyLeaderboardRuns || []).filter(r => (r.timestamp || 0) >= (state.leaderboardClearedAt || 0)).slice(0, 30),
       dailyFeed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 30),
       phrases: state.phrases || [...DEFAULT_PHRASES],
+      phrasePools: state.phrasePools || {
+        steve: [...DEFAULT_STEVE_PHRASES],
+        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      },
       passcode: state.passcode || DEFAULT_PIN,
       passcodeUpdatedAt: state.passcodeUpdatedAt || 0,
       suggestions: (state.suggestions || []).slice(0, 50),
@@ -4056,9 +4196,21 @@ input:focus, textarea:focus, button:focus-visible {
         });
       }
 
-      // 4. Sync room phrase pool
-      if (Array.isArray(data.phrases) && data.phrases.length >= 24) {
+      // 4. Sync room phrase pools
+      if (data.phrasePools && typeof data.phrasePools === "object") {
+        if (!state.phrasePools) state.phrasePools = {};
+        if (Array.isArray(data.phrasePools.steve) && data.phrasePools.steve.length >= 24) {
+          state.phrasePools.steve = [...data.phrasePools.steve];
+        }
+        if (Array.isArray(data.phrasePools.everybody) && data.phrasePools.everybody.length >= 24) {
+          state.phrasePools.everybody = [...data.phrasePools.everybody];
+        }
+        syncActiveModeToState();
+        if (settingsUnlocked) renderSettingsManagerView();
+      } else if (Array.isArray(data.phrases) && data.phrases.length >= 24) {
         state.phrases = [...data.phrases];
+        if (!state.phrasePools) state.phrasePools = {};
+        state.phrasePools.steve = [...data.phrases];
         if (settingsUnlocked) renderSettingsManagerView();
       }
 
@@ -4237,6 +4389,7 @@ input:focus, textarea:focus, button:focus-visible {
             avatarEmoji: state.avatarEmoji || "🍟"
           },
           suggestions: (state.suggestions || []).slice(0, 50),
+          phrasePools: state.phrasePools || null,
           feed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 20)
         });
         if (state.isCompleted && Array.isArray(state.dailyLeaderboardRuns)) {
@@ -4278,6 +4431,17 @@ input:focus, textarea:focus, button:focus-visible {
         });
         saveState();
         updateSettingsNavBadge();
+        if (settingsUnlocked) renderSettingsManagerView();
+      }
+      if (data.phrasePools && typeof data.phrasePools === "object") {
+        if (!state.phrasePools) state.phrasePools = {};
+        if (Array.isArray(data.phrasePools.steve) && data.phrasePools.steve.length >= 24) {
+          state.phrasePools.steve = [...data.phrasePools.steve];
+        }
+        if (Array.isArray(data.phrasePools.everybody) && data.phrasePools.everybody.length >= 24) {
+          state.phrasePools.everybody = [...data.phrasePools.everybody];
+        }
+        syncActiveModeToState();
         if (settingsUnlocked) renderSettingsManagerView();
       }
       renderLeaderboard();
@@ -4573,13 +4737,29 @@ input:focus, textarea:focus, button:focus-visible {
       }
       if (status === "approved") {
         const phrase = data.phrase || (s ? s.text : "");
-        if (phrase && !state.phrases.some(p => p.toLowerCase() === phrase.toLowerCase())) {
-          state.phrases.push(phrase);
+        const targetMode = data.targetMode || (s ? s.targetMode : "steve") || "steve";
+        if (!state.phrasePools) {
+          state.phrasePools = {
+            steve: [...DEFAULT_STEVE_PHRASES],
+            everybody: [...DEFAULT_EVERYBODY_PHRASES]
+          };
+        }
+        if (!Array.isArray(state.phrasePools[targetMode])) {
+          state.phrasePools[targetMode] = targetMode === "steve" ? [...DEFAULT_STEVE_PHRASES] : [...DEFAULT_EVERYBODY_PHRASES];
+        }
+        if (phrase && !state.phrasePools[targetMode].some(p => p.toLowerCase() === phrase.toLowerCase())) {
+          state.phrasePools[targetMode].push(phrase);
+        }
+        if (state.gameMode === targetMode) {
+          if (phrase && !state.phrases.some(p => p.toLowerCase() === phrase.toLowerCase())) {
+            state.phrases.push(phrase);
+          }
         }
         if ((data.author && data.author === state.nickname) || (s && s.suggestedBy === state.nickname)) {
           unlockAchievement("crowd_pleaser", state.nickname);
         }
-        showToast("💡", "Suggestion Approved", `Added "${phrase}" to phrase pool.`);
+        const modeLabel = targetMode === "steve" ? "Steve Mode" : "Everybody Mode";
+        showToast("💡", "Suggestion Approved", `Added "${phrase}" to ${modeLabel} phrase pool.`);
       }
       saveState();
       updateSettingsNavBadge();
@@ -4619,6 +4799,8 @@ input:focus, textarea:focus, button:focus-visible {
   window.handleResetAllDailyAccountsAction = handleResetAllDailyAccountsAction;
   window.handleClearPlayerLifetimeStatsAction = handleClearPlayerLifetimeStatsAction;
   window.handleClearCurrentProfileStats = handleClearCurrentProfileStats;
+  window.handleExecuteManagerAuth = handleExecuteManagerAuth;
+  window.handleSelectSuggestMode = handleSelectSuggestMode;
   window.handleSwitchMode = handleSwitchMode;
   window.handleSwitchSettingsPhrasePool = handleSwitchSettingsPhrasePool;
 

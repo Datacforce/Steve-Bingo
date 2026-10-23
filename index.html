@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1e1a2e">
-<title>Steve Bingo!</title>
+<title>Steve Bingo! 🍟</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍟</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 <style>
@@ -312,6 +312,47 @@ input:focus, textarea:focus, button:focus-visible {
   gap: 16px;
 }
 
+/* Mode Switcher Pill */
+.mode-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #151224;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 3px;
+}
+.mode-tab-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+.mode-tab-btn:hover {
+  color: var(--text);
+  filter: brightness(1.2);
+}
+.mode-tab-btn.active {
+  color: #171124;
+  font-weight: 800;
+}
+.mode-tab-btn.active.steve {
+  background: var(--accent);
+  color: #171124;
+  box-shadow: 0 2px 8px rgba(196, 166, 255, 0.35);
+}
+.mode-tab-btn.active.everybody {
+  background: var(--accent2);
+  color: #102521;
+  box-shadow: 0 2px 8px rgba(142, 227, 208, 0.35);
+}
+
 /* Tabs */
 .tabs-wrap {
   display: flex;
@@ -453,11 +494,11 @@ input:focus, textarea:focus, button:focus-visible {
   text-align: center;
   opacity: 0.45;
   cursor: pointer;
+  user-select: none;
   transition: opacity 0.2s, border-color 0.2s, background 0.2s, transform 0.08s ease;
 }
 .trophy-card:hover { filter: brightness(1.2); }
 .trophy-card:active { transform: scale(0.96); }
-}
 .trophy-card.unlocked {
   opacity: 1;
   border-color: var(--gold);
@@ -626,15 +667,21 @@ input:focus, textarea:focus, button:focus-visible {
   <main class="layout">
     <!-- Left Column: The 5x5 Bingo Board -->
     <section class="panel">
-      <div class="panel-head">
-        <h2>🎮 5×5 Bingo Board</h2>
+      <div class="panel-head" style="flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <h2>🎮 5×5 Bingo Board</h2>
+          <div class="mode-toggle-pill" role="tablist" aria-label="Game Mode">
+            <button id="modeSteveBtn" class="mode-tab-btn active steve" type="button" onclick="handleSwitchMode('steve')">🍟 Steve Mode</button>
+            <button id="modeEverybodyBtn" class="mode-tab-btn" type="button" onclick="handleSwitchMode('everybody')">👥 Everybody Mode</button>
+          </div>
+        </div>
         <span id="bingoBannerTag" class="chip gold" style="color:#f6d67a; border-color:#785f26;">Center is FREE SPACE</span>
       </div>
 
       <div class="player-bar">
         <div class="player-info">
-          <span>Playing as: <span id="boardAvatarDisplay" class="feed-avatar" style="margin:0 2px 0 4px;">🍟</span><strong id="boardNickDisplay" style="color:var(--accent2);">Player</strong></span>
-
+          <span>Playing as: <span id="boardAvatarDisplay" class="feed-avatar" style="margin:0 2px 0 4px;">🍟</span><strong id="boardNickDisplay" style="color:var(--accent2);">Player</strong> <span id="activeModeBadge" class="chip" style="margin-left:4px; font-size:0.72rem; padding:2px 8px; border-color:var(--accent); color:var(--accent);">🍟 Steve Mode</span></span>
+          <span id="boardBadgesDisplay"></span>
         </div>
         <div>
           <button id="resetMarksBtn" class="small-btn" type="button" onclick="handleResetMarksPrompt()">Clear marks</button>
@@ -945,7 +992,13 @@ input:focus, textarea:focus, button:focus-visible {
 
       <!-- Active Phrase Pool List & Editor -->
       <div>
-        <h4 style="margin:0 0 4px; font-size:0.95rem; color:var(--gold);">Active Phrase Pool (<span id="settingsPhraseCount">0</span> items)</h4>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+          <h4 style="margin:0; font-size:0.95rem; color:var(--gold);">Active Phrase Pool (<span id="settingsPhraseCount">0</span> items)</h4>
+          <div class="mode-toggle-pill" style="padding:2px; font-size:0.75rem;">
+            <button id="settingsPhraseSteveBtn" class="mode-tab-btn active steve" type="button" onclick="handleSwitchSettingsPhrasePool('steve')">🍟 Steve Prompts</button>
+            <button id="settingsPhraseEverybodyBtn" class="mode-tab-btn" type="button" onclick="handleSwitchSettingsPhrasePool('everybody')">👥 Everybody Prompts</button>
+          </div>
+        </div>
         <p class="feed-meta" style="margin:0 0 6px;">One phrase per line. At least 24 unique phrases required for 5×5 bingo.</p>
         <textarea id="settingsPhrasesEditor" rows="7" style="font-size:0.85rem; font-family:inherit; resize:vertical;"></textarea>
         <div style="display:flex; gap:8px; margin-top:6px;">
@@ -1008,8 +1061,29 @@ input:focus, textarea:focus, button:focus-visible {
 <!-- ============================================================ -->
 <script>
 (() => {
-  // Built-in Default Phrase Pool (50 relatable Steve / streaming phrases)
-  const DEFAULT_PHRASES = [
+  // Steve Mode Phrase Pool (50 Steve-specific stream phrases)
+  const DEFAULT_STEVE_PHRASES = [
+    "Steve says “literally”", "Steve drinks something", "Steve laughs out loud",
+    "Steve’s pet appears on camera", "Steve says “wait what?”", "Steve forgets a name",
+    "Steve mentions a snack", "Steve says “bro”", "Steve changes the topic",
+    "Steve says “I mean”", "Steve makes a dramatic reaction", "Steve yawns",
+    "Steve says “anyway”", "Steve says “actually”", "Steve says “oh no”",
+    "Steve talks over someone", "Steve makes a funny face", "Steve gets distracted",
+    "Steve says “I can’t”", "Steve mispronounces a word", "Steve says “exactly”",
+    "Steve gets very excited", "Steve starts a crazy tangent", "Steve says “of course”",
+    "Steve lets out a dramatic sigh", "Steve drops or fumbles something", "Steve blames lag or a glitch",
+    "Steve hums or sings a song", "Steve says “dude”", "Steve mentions cold pizza",
+    "Steve adjusts his headset or camera", "Steve says “no way”", "Steve checks his phone",
+    "Steve says “fair enough”", "Steve says “same”", "Steve claims he was right all along",
+    "Steve says “listen to me”", "Steve loses his train of thought", "Steve says “help”",
+    "Steve complains about chat", "Steve gives a passionate rant", "Steve says “what?!”",
+    "Steve celebrates a tiny victory", "Steve says “hold on”", "Steve says “I forgot”",
+    "Steve says “real”", "Steve makes an awkward pause", "Steve says “trust me”",
+    "Steve says “classic”", "Steve repeats himself 3 times"
+  ];
+
+  // Everybody Mode Phrase Pool (50 co-streamer / chat / room phrases)
+  const DEFAULT_EVERYBODY_PHRASES = [
     "Someone says “literally”", "A drink gets mentioned", "Someone laughs out loud",
     "A pet appears on screen", "A surprise interruption", "Someone says “wait what?”",
     "A song gets referenced", "Someone forgets a name", "A snack is mentioned",
@@ -1028,6 +1102,8 @@ input:focus, textarea:focus, button:focus-visible {
     "Someone says “hello?”", "A crazy tangent starts", "Someone says “of course”",
     "A tiny victory happens", "A dramatic sigh is heard"
   ];
+
+  const DEFAULT_PHRASES = DEFAULT_STEVE_PHRASES;
 
   // 12 Core Achievements Definition
   const ACHIEVEMENTS = [
@@ -1108,7 +1184,30 @@ input:focus, textarea:focus, button:focus-visible {
     passcodeUpdatedAt: 0,
     feedClearedAt: 0,
     leaderboardClearedAt: 0,
-    phrases: [...DEFAULT_PHRASES],
+    gameMode: "steve", // "steve" or "everybody"
+    // Separate boards & marks for each mode:
+    boards: {
+      steve: {
+        board: [],
+        marked: [],
+        bingosCount: 0,
+        linesCount: 0,
+        cardAchievements: []
+      },
+      everybody: {
+        board: [],
+        marked: [],
+        bingosCount: 0,
+        linesCount: 0,
+        cardAchievements: []
+      }
+    },
+    // Separate phrase pools for each mode:
+    phrasePools: {
+      steve: [...DEFAULT_STEVE_PHRASES],
+      everybody: [...DEFAULT_EVERYBODY_PHRASES]
+    },
+    phrases: [...DEFAULT_STEVE_PHRASES],
     board: [],
     marked: [],
     timerStartedAt: null,
@@ -1134,6 +1233,109 @@ input:focus, textarea:focus, button:focus-visible {
   let settingsUnlocked = false;
   let pendingConfirmAction = null;
   let broadcastChan = null;
+  let settingsCurrentPhraseMode = "steve";
+
+  /* ============================================================ */
+  /* MODE SYNC HELPERS (Steve Mode vs Everybody Mode)             */
+  /* ============================================================ */
+  function syncActiveModeToState() {
+    const mode = state.gameMode || "steve";
+    if (!state.boards) state.boards = {};
+    if (!state.boards[mode]) {
+      state.boards[mode] = {
+        board: [],
+        marked: [],
+        bingosCount: 0,
+        linesCount: 0,
+        cardAchievements: []
+      };
+    }
+    const b = state.boards[mode];
+    state.board = b.board;
+    state.marked = b.marked;
+    state.bingosCount = b.bingosCount || 0;
+    state.linesCount = b.linesCount || 0;
+    state.cardAchievements = b.cardAchievements || [];
+
+    if (!state.phrasePools) {
+      state.phrasePools = {
+        steve: [...DEFAULT_STEVE_PHRASES],
+        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      };
+    }
+    state.phrases = state.phrasePools[mode] || (mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES);
+  }
+
+  function syncStateToActiveMode() {
+    const mode = state.gameMode || "steve";
+    if (!state.boards) state.boards = {};
+    state.boards[mode] = {
+      board: [...(state.board || [])],
+      marked: [...(state.marked || [])],
+      bingosCount: state.bingosCount || 0,
+      linesCount: state.linesCount || 0,
+      cardAchievements: [...(state.cardAchievements || [])]
+    };
+    if (!state.phrasePools) state.phrasePools = {};
+    state.phrasePools[mode] = [...(state.phrases || (mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES))];
+  }
+
+  function updateModeSwitcherUI() {
+    const isSteve = (state.gameMode || "steve") === "steve";
+    const steveBtn = $("modeSteveBtn");
+    const everyBtn = $("modeEverybodyBtn");
+    if (steveBtn) {
+      steveBtn.className = "mode-tab-btn" + (isSteve ? " active steve" : "");
+    }
+    if (everyBtn) {
+      everyBtn.className = "mode-tab-btn" + (!isSteve ? " active everybody" : "");
+    }
+    const badge = $("activeModeBadge");
+    if (badge) {
+      badge.textContent = isSteve ? "🍟 Steve Mode" : "👥 Everybody Mode";
+      badge.style.borderColor = isSteve ? "var(--accent)" : "var(--accent2)";
+      badge.style.color = isSteve ? "var(--accent)" : "var(--accent2)";
+    }
+    const dayPill = $("dayCyclePill");
+    if (dayPill) {
+      dayPill.textContent = isSteve ? "🗓️ Daily Match active · 🍟 Steve Mode" : "🗓️ Daily Match active · 👥 Everybody Mode";
+    }
+    const bannerTag = $("bingoBannerTag");
+    if (bannerTag) {
+      bannerTag.textContent = isSteve ? "Steve Mode · Center is FREE SPACE" : "Everybody Mode · Center is FREE SPACE";
+    }
+  }
+
+  function handleSwitchMode(newMode) {
+    if (!newMode || state.gameMode === newMode) return;
+
+    // 1. Save current board & marks to current mode
+    syncStateToActiveMode();
+
+    // 2. Set active mode
+    state.gameMode = newMode;
+
+    // 3. Ensure target mode has a board
+    if (!state.boards) state.boards = {};
+    if (!state.boards[newMode] || !Array.isArray(state.boards[newMode].board) || state.boards[newMode].board.length !== 25) {
+      generateFreshBoardForMode(newMode, false);
+    }
+
+    // 4. Load target mode into active state
+    syncActiveModeToState();
+
+    // 5. Update UI
+    updateModeSwitcherUI();
+    renderBoard();
+    renderHeader();
+    saveState();
+
+    showToast(
+      newMode === "steve" ? "🍟" : "👥",
+      newMode === "steve" ? "Steve Mode" : "Everybody Mode",
+      newMode === "steve" ? "Switched to Steve's prompts. Checked boxes saved!" : "Switched to Everybody prompts. Checked boxes saved!"
+    );
+  }
 
   
   // Storage Support Detector
@@ -1162,10 +1364,6 @@ input:focus, textarea:focus, button:focus-visible {
       }
     } catch (e) {}
 
-    // Ensure phrases is valid array of strings
-    if (!Array.isArray(state.phrases) || state.phrases.length < 24) {
-      state.phrases = [...DEFAULT_PHRASES];
-    }
     if (!state.avatarEmoji) {
       state.avatarEmoji = "🍟";
     }
@@ -1175,6 +1373,51 @@ input:focus, textarea:focus, button:focus-visible {
     if (!state.feedClearedAt) state.feedClearedAt = 0;
     if (!state.leaderboardClearedAt) state.leaderboardClearedAt = 0;
     if (!state.passcodeUpdatedAt) state.passcodeUpdatedAt = 0;
+
+    // Mode & Phrase Pools initialization
+    if (!state.gameMode) state.gameMode = "steve";
+    if (!state.phrasePools) {
+      state.phrasePools = {
+        steve: [...DEFAULT_STEVE_PHRASES],
+        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      };
+      if (Array.isArray(state.phrases) && state.phrases.length >= 24) {
+        state.phrasePools.steve = [...state.phrases];
+      }
+    } else {
+      if (!Array.isArray(state.phrasePools.steve) || state.phrasePools.steve.length < 24) {
+        state.phrasePools.steve = [...DEFAULT_STEVE_PHRASES];
+      }
+      if (!Array.isArray(state.phrasePools.everybody) || state.phrasePools.everybody.length < 24) {
+        state.phrasePools.everybody = [...DEFAULT_EVERYBODY_PHRASES];
+      }
+    }
+
+    // Boards initialization & migration
+    if (!state.boards) {
+      state.boards = {};
+      const isValidBoard = Array.isArray(state.board) && state.board.length === 25 &&
+                           Array.isArray(state.marked) && state.marked.length === 25;
+      if (isValidBoard) {
+        state.boards.steve = {
+          board: [...state.board],
+          marked: [...state.marked],
+          bingosCount: state.bingosCount || 0,
+          linesCount: state.linesCount || 0,
+          cardAchievements: state.cardAchievements || []
+        };
+      }
+    }
+
+    // Ensure both mode boards exist
+    ["steve", "everybody"].forEach(m => {
+      if (!state.boards[m] || !Array.isArray(state.boards[m].board) || state.boards[m].board.length !== 25) {
+        generateFreshBoardForMode(m, false);
+      }
+    });
+
+    // Sync active mode to state
+    syncActiveModeToState();
 
     if (!Array.isArray(state.suggestions)) state.suggestions = [];
     if (!Array.isArray(state.rejectedSuggestionIds)) state.rejectedSuggestionIds = [];
@@ -1203,15 +1446,6 @@ input:focus, textarea:focus, button:focus-visible {
     // Check for 5:00 AM daily cycle rollover
     checkDailyReset();
 
-    // Verify board validity (must have 25 items and index 12 as FREE SPACE)
-    const isValidBoard = Array.isArray(state.board) &&
-                         state.board.length === 25 &&
-                         Array.isArray(state.marked) &&
-                         state.marked.length === 25;
-    if (!isValidBoard) {
-      generateFreshBoard(false);
-    }
-
     // Initialize multiplayer / cross-tab broadcast
     initBroadcast();
 
@@ -1221,6 +1455,7 @@ input:focus, textarea:focus, button:focus-visible {
     renderLeaderboard();
     renderFeed();
     renderTrophiesWidget();
+    updateModeSwitcherUI();
     updateSettingsNavBadge();
 
     // Check if player has answered the "Would you like to play today?" prompt
@@ -1259,13 +1494,16 @@ input:focus, textarea:focus, button:focus-visible {
       state.dailyPlayers = {};
       state.bingosCount = 0;
       state.linesCount = 0;
-      generateFreshBoard(true);
+      generateFreshBoardForMode("steve", true);
+      generateFreshBoardForMode("everybody", false);
+      syncActiveModeToState();
       saveState();
 
       renderHeader();
       renderBoard();
       renderLeaderboard();
       renderFeed();
+      updateModeSwitcherUI();
       showDailyGate();
       showToast("🌅", "5:00 AM Daily Reset!", "Today's room and leaderboard have been refreshed.");
     }
@@ -1283,10 +1521,18 @@ input:focus, textarea:focus, button:focus-visible {
     return copy;
   }
 
-  function generateFreshBoard(resetTimer = true) {
+  function generateFreshBoardForMode(mode = "steve", resetTimer = true) {
     const phrasesNeeded = 24; // 25 total minus center free space
-    let pool = state.phrases.filter(p => p && p.trim().length > 0);
-    if (pool.length < phrasesNeeded) pool = [...DEFAULT_PHRASES];
+    if (!state.phrasePools) {
+      state.phrasePools = {
+        steve: [...DEFAULT_STEVE_PHRASES],
+        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      };
+    }
+    const poolData = state.phrasePools[mode] || (mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES);
+    let pool = poolData.filter(p => p && p.trim().length > 0);
+    const defaults = mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES;
+    if (pool.length < phrasesNeeded) pool = [...defaults];
 
     const chosen = shuffleArray(pool).slice(0, phrasesNeeded);
     const newBoard = [];
@@ -1299,26 +1545,45 @@ input:focus, textarea:focus, button:focus-visible {
       }
     }
 
-    state.board = newBoard;
-    state.marked = Array(25).fill(false);
-    state.marked[12] = true; // Free space marked by default
-    state.cardAchievements = []; // Reset per-card achievement limiter for new board
+    const newMarked = Array(25).fill(false);
+    newMarked[12] = true; // Free space marked by default
 
-    if (resetTimer) {
-      // Start timer on New Board button
-      state.timerStartedAt = Date.now();
-      state.timerElapsedBefore = 0;
-      state.isCompleted = false;
+    if (!state.boards) state.boards = {};
+    state.boards[mode] = {
+      board: newBoard,
+      marked: newMarked,
+      bingosCount: 0,
+      linesCount: 0,
+      cardAchievements: []
+    };
+
+    if (mode === (state.gameMode || "steve")) {
+      state.board = newBoard;
+      state.marked = newMarked;
       state.bingosCount = 0;
       state.linesCount = 0;
-      startTimerTicker();
-      updateTimerDisplay();
-      trackGamePlayed();
-    }
+      state.cardAchievements = [];
 
-    updateCurrentPlayerTodayStats();
-    saveState();
-    renderBoard();
+      if (resetTimer) {
+        // Start timer on New Board button
+        state.timerStartedAt = Date.now();
+        state.timerElapsedBefore = 0;
+        state.isCompleted = false;
+        startTimerTicker();
+        updateTimerDisplay();
+        trackGamePlayed();
+      }
+
+      updateCurrentPlayerTodayStats();
+      saveState();
+      renderBoard();
+    } else {
+      saveState();
+    }
+  }
+
+  function generateFreshBoard(resetTimer = true) {
+    generateFreshBoardForMode(state.gameMode || "steve", resetTimer);
   }
 
   function getLinesDefinitions() {
@@ -1364,6 +1629,9 @@ input:focus, textarea:focus, button:focus-visible {
       trackGamePlayed();
     }
 
+    // Keep active mode's board and marked in sync immediately
+    syncStateToActiveMode();
+
     // Calculate completed lines
     const activeLines = getCompletedLines();
     const prevLinesCount = state.linesCount || 0;
@@ -1386,6 +1654,9 @@ input:focus, textarea:focus, button:focus-visible {
 
     // Check in-game milestone achievements
     checkAchievementsProgress();
+
+    // Keep active mode data in sync
+    syncStateToActiveMode();
 
     // Update active player's record in daily leaderboard data
     updateCurrentPlayerTodayStats();
@@ -1554,14 +1825,15 @@ input:focus, textarea:focus, button:focus-visible {
     };
     state.dailyLeaderboardRuns.push(runItem);
 
-    // Announce in live feed
+    // Announce in live feed with active mode
+    const modeName = (state.gameMode || "steve") === "steve" ? "Steve Mode" : "Everybody Mode";
     const bingoFeedId = `feed_bingo_${runItem.id}`;
     addFeedItem({
       id: bingoFeedId,
       type: "bingo",
       user: playerNick,
       avatar: state.avatarEmoji || "🍟",
-      message: `scored a BINGO (${totalLines} line${totalLines === 1 ? "" : "s"} in ${formatted})!`,
+      message: `scored a BINGO on ${modeName} (${totalLines} line${totalLines === 1 ? "" : "s"} in ${formatted})!`,
       tag: "BINGO!",
       timestamp: Date.now()
     });
@@ -1579,7 +1851,7 @@ input:focus, textarea:focus, button:focus-visible {
     });
 
     fireConfetti(5000);
-    showToast("🎉", "BINGO!", `You hit a bingo in ${formatted}!`);
+    showToast("🎉", `BINGO on ${modeName}!`, `You hit a bingo in ${formatted}!`);
   }
 
   function updateCurrentPlayerTodayStats(overrideNick, overrideAvatar) {
@@ -2005,11 +2277,11 @@ input:focus, textarea:focus, button:focus-visible {
         <div class="trophy-count">${isUn ? `✓ ${prof.counts[ach.id] || 1}x` : "Locked"}</div>
       `;
       card.title = `${ach.name}: ${ach.desc}`;
-card.onclick = () => {
-  const status = isUn ? `(Unlocked ${prof.counts[ach.id] || 1}x)` : "(Locked)";
-  showToast(ach.emoji, `${ach.name} ${status}`, `How to get: ${ach.desc}`);
-};
-grid.appendChild(card);
+      card.onclick = () => {
+        const status = isUn ? `(Unlocked ${prof.counts[ach.id] || 1}x)` : "(Locked)";
+        showToast(ach.emoji, `${ach.name} ${status}`, `How to get: ${ach.desc}`);
+      };
+      grid.appendChild(card);
     });
   }
 
@@ -2030,7 +2302,7 @@ grid.appendChild(card);
       const a = ACHIEVEMENTS.find(item => item.id === id);
       return a ? a.emoji : "";
     }).join("");
-  
+    if ($("boardBadgesDisplay")) $("boardBadgesDisplay").textContent = badgeStr ? " " + badgeStr : "";
   }
 
   function renderBoard() {
@@ -2626,9 +2898,7 @@ grid.appendChild(card);
     }
 
     // 2. Active Phrase Pool Editor
-    $("settingsPhraseCount").textContent = state.phrases.length;
-    $("settingsPhrasesEditor").value = state.phrases.join("\n");
-    $("settingsPhrasesStatus").textContent = "";
+    handleSwitchSettingsPhrasePool(settingsCurrentPhraseMode || "steve");
 
     // 3. Today's Account Manager
     renderSettingsAccountManager();
@@ -2824,6 +3094,26 @@ grid.appendChild(card);
     handleCloseModal("profileModal");
   }
 
+  function handleSwitchSettingsPhrasePool(mode) {
+    settingsCurrentPhraseMode = mode || "steve";
+    const isSteve = settingsCurrentPhraseMode === "steve";
+    const sBtn = $("settingsPhraseSteveBtn");
+    const eBtn = $("settingsPhraseEverybodyBtn");
+    if (sBtn) sBtn.className = "mode-tab-btn" + (isSteve ? " active steve" : "");
+    if (eBtn) eBtn.className = "mode-tab-btn" + (!isSteve ? " active everybody" : "");
+
+    if (!state.phrasePools) {
+      state.phrasePools = {
+        steve: [...DEFAULT_STEVE_PHRASES],
+        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      };
+    }
+    const pool = state.phrasePools[settingsCurrentPhraseMode] || (isSteve ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES);
+    $("settingsPhraseCount").textContent = pool.length;
+    $("settingsPhrasesEditor").value = pool.join("\n");
+    $("settingsPhrasesStatus").textContent = "";
+  }
+
   function handleSavePhrasesAction() {
     const raw = $("settingsPhrasesEditor").value;
     const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
@@ -2834,33 +3124,49 @@ grid.appendChild(card);
       return;
     }
 
-    state.phrases = unique;
+    const mode = settingsCurrentPhraseMode || "steve";
+    if (!state.phrasePools) state.phrasePools = {};
+    state.phrasePools[mode] = unique;
+    if (state.gameMode === mode) {
+      state.phrases = unique;
+    }
     saveState();
     $("settingsPhraseCount").textContent = unique.length;
-    $("settingsPhrasesStatus").textContent = `✓ Saved ${unique.length} phrases! Fresh boards will pull from this pool.`;
-    showToast("📝", "Phrase Pool Saved", `${unique.length} phrases updated across all browsers.`);
+    const modeLabel = mode === "steve" ? "Steve Prompts" : "Everybody Prompts";
+    $("settingsPhrasesStatus").textContent = `✓ Saved ${unique.length} phrases for ${modeLabel}! Fresh boards will pull from this pool.`;
+    showToast("📝", "Phrase Pool Saved", `${modeLabel} updated (${unique.length} phrases).`);
 
     // Broadcast updated phrase pool to all connected browsers
     broadcastEvent({
       type: "settings_update",
       setting: "phrases",
+      mode: mode,
       phrases: unique
     });
     publishRoomSnapshot();
   }
 
   function handleRestoreDefaultPhrases() {
-    openConfirmPrompt("Restore Default Phrases", "Reset the bingo phrase pool back to default 50 phrases?", () => {
-      state.phrases = [...DEFAULT_PHRASES];
+    const mode = settingsCurrentPhraseMode || "steve";
+    const modeLabel = mode === "steve" ? "Steve Mode" : "Everybody Mode";
+    const defaults = mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES;
+
+    openConfirmPrompt("Restore Default Phrases", `Reset ${modeLabel} phrase pool back to default 50 phrases?`, () => {
+      if (!state.phrasePools) state.phrasePools = {};
+      state.phrasePools[mode] = [...defaults];
+      if (state.gameMode === mode) {
+        state.phrases = [...defaults];
+      }
       saveState();
-      renderSettingsManagerView();
-      showToast("🔄", "Defaults Restored", "Built-in phrase pool restored across all browsers.");
+      handleSwitchSettingsPhrasePool(mode);
+      showToast("🔄", "Defaults Restored", `${modeLabel} phrase pool restored.`);
 
       // Broadcast restored defaults across all browsers
       broadcastEvent({
         type: "settings_update",
         setting: "phrases",
-        phrases: state.phrases
+        mode: mode,
+        phrases: defaults
       });
       publishRoomSnapshot();
     });
@@ -3251,12 +3557,12 @@ grid.appendChild(card);
         <div class="trophy-name">${ach.name}</div>
         <div class="trophy-count">${isUn ? `✓ ${prof.counts[ach.id] || 1}x` : "Locked"}</div>
       `;
- card.title = `${ach.name}: ${ach.desc}`;
-card.onclick = () => {
-  const status = isUn ? `(Unlocked ${prof.counts[ach.id] || 1}x)` : "(Locked)";
-  showToast(ach.emoji, `${ach.name} ${status}`, `How to get: ${ach.desc}`);
-};
-grid.appendChild(card);
+      card.title = `${ach.name}: ${ach.desc}`;
+      card.onclick = () => {
+        const status = isUn ? `(Unlocked ${prof.counts[ach.id] || 1}x)` : "(Locked)";
+        showToast(ach.emoji, `${ach.name} ${status}`, `How to get: ${ach.desc}`);
+      };
+      grid.appendChild(card);
     });
 
     $("profileModal").classList.remove("hidden");
@@ -3268,14 +3574,16 @@ grid.appendChild(card);
   }
 
   function handleNewBoardPrompt() {
-    openConfirmPrompt("New Board", "Generate a fresh randomized board? Current marks will be cleared.", () => {
+    const modeName = (state.gameMode || "steve") === "steve" ? "Steve Mode" : "Everybody Mode";
+    openConfirmPrompt("New Board", `Generate a fresh randomized board for ${modeName}? Current marks will be cleared. (The other mode's board will be kept safe)`, () => {
       generateFreshBoard(true);
-      showToast("🎲", "New Board", "Randomized 5x5 board ready!");
+      showToast("🎲", "New Board", `Randomized 5x5 board ready for ${modeName}!`);
     });
   }
 
   function handleResetMarksPrompt() {
-    openConfirmPrompt("Clear Marks", "Clear all marks on this board and restart timer?", () => {
+    const modeName = (state.gameMode || "steve") === "steve" ? "Steve Mode" : "Everybody Mode";
+    openConfirmPrompt("Clear Marks", `Clear all marks on ${modeName} board and restart timer? (The other mode's board will be kept safe)`, () => {
       state.marked = Array(25).fill(false);
       state.marked[12] = true; // center is free space
       state.timerStartedAt = Date.now();
@@ -3284,13 +3592,14 @@ grid.appendChild(card);
       state.bingosCount = 0;
       state.linesCount = 0;
       state.cardAchievements = []; // Reset per-card achievement limiter
+      syncStateToActiveMode();
       startTimerTicker();
       updateTimerDisplay();
       updateCurrentPlayerTodayStats();
       saveState();
       renderBoard();
       renderLeaderboard();
-      showToast("🔄", "Marks Cleared", "Board marks reset and timer restarted.");
+      showToast("🔄", "Marks Cleared", `${modeName} marks reset and timer restarted.`);
     });
   }
 
@@ -3774,10 +4083,15 @@ grid.appendChild(card);
     // 0d. SETTINGS UPDATE: Synchronize word pool and passcode in real time
     if (data.type === "settings_update") {
       if (data.setting === "phrases" && Array.isArray(data.phrases) && data.phrases.length >= 24) {
-        state.phrases = [...data.phrases];
+        const targetMode = data.mode || "steve";
+        if (!state.phrasePools) state.phrasePools = {};
+        state.phrasePools[targetMode] = [...data.phrases];
+        if (state.gameMode === targetMode) {
+          state.phrases = [...data.phrases];
+        }
         saveState();
         if (settingsUnlocked) renderSettingsManagerView();
-        showToast("📝", "Phrase Pool Updated", `Room phrase pool updated to ${data.phrases.length} phrases.`);
+        showToast("📝", "Phrase Pool Updated", `${targetMode === "steve" ? "Steve" : "Everybody"} phrase pool updated to ${data.phrases.length} phrases.`);
       }
       if (data.setting === "passcode" && data.passcode) {
         const updateTime = data.passcodeUpdatedAt || data.updatedAt || 0;
@@ -4243,6 +4557,8 @@ grid.appendChild(card);
   window.handleResetAllDailyAccountsAction = handleResetAllDailyAccountsAction;
   window.handleClearPlayerLifetimeStatsAction = handleClearPlayerLifetimeStatsAction;
   window.handleClearCurrentProfileStats = handleClearCurrentProfileStats;
+  window.handleSwitchMode = handleSwitchMode;
+  window.handleSwitchSettingsPhrasePool = handleSwitchSettingsPhrasePool;
 
   // Global Keyboard shortcuts & modal dismissal
   document.addEventListener("keydown", e => {
@@ -4284,4 +4600,4 @@ grid.appendChild(card);
 })();
 </script>
 </body>
-  </html>
+</html>

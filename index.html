@@ -1300,6 +1300,8 @@ input:focus, textarea:focus, button:focus-visible {
   let pendingConfirmAction = null;
   let broadcastChan = null;
   let settingsCurrentPhraseMode = "steve";
+  let mqttMessagesReceived = 0;
+  let awaitingFirstRoomPoolSync = false;
 
   /* ============================================================ */
   /* MODE SYNC HELPERS (Steve Mode vs Everybody Mode)             */
@@ -1313,7 +1315,8 @@ input:focus, textarea:focus, button:focus-visible {
         marked: [],
         bingosCount: 0,
         linesCount: 0,
-        cardAchievements: []
+        cardAchievements: [],
+        poolVersion: 0
       };
     }
     const b = state.boards[mode];
@@ -1335,12 +1338,14 @@ input:focus, textarea:focus, button:focus-visible {
   function syncStateToActiveMode() {
     const mode = state.gameMode || "steve";
     if (!state.boards) state.boards = {};
+    const existingPoolVer = (state.boards[mode] && state.boards[mode].poolVersion) || 0;
     state.boards[mode] = {
       board: [...(state.board || [])],
       marked: [...(state.marked || [])],
       bingosCount: state.bingosCount || 0,
       linesCount: state.linesCount || 0,
-      cardAchievements: [...(state.cardAchievements || [])]
+      cardAchievements: [...(state.cardAchievements || [])],
+      poolVersion: existingPoolVer
     };
   }
 
@@ -1476,9 +1481,12 @@ input:focus, textarea:focus, button:focus-visible {
       }
     }
 
-    // Ensure both mode boards exist
+    // Ensure both mode boards exist and unstarted boards match latest known poolVersion
     ["steve", "everybody"].forEach(m => {
-      if (!state.boards[m] || !Array.isArray(state.boards[m].board) || state.boards[m].board.length !== 25) {
+      const poolVer = (state.phrasePoolsUpdatedAt && state.phrasePoolsUpdatedAt[m]) || 0;
+      const b = state.boards[m];
+      const boardVer = (b && b.poolVersion) || 0;
+      if (!b || !Array.isArray(b.board) || b.board.length !== 25 || (!state.playedToday && poolVer > boardVer)) {
         generateFreshBoardForMode(m, false);
       }
     });
@@ -1631,13 +1639,15 @@ input:focus, textarea:focus, button:focus-visible {
     const newMarked = Array(25).fill(false);
     newMarked[12] = true; // Free space marked by default
 
+    const currentPoolVer = (state.phrasePoolsUpdatedAt && state.phrasePoolsUpdatedAt[mode]) || 0;
     if (!state.boards) state.boards = {};
     state.boards[mode] = {
       board: newBoard,
       marked: newMarked,
       bingosCount: 0,
       linesCount: 0,
-      cardAchievements: []
+      cardAchievements: [],
+      poolVersion: currentPoolVer
     };
 
     if (mode === (state.gameMode || "steve")) {
@@ -1667,6 +1677,118 @@ input:focus, textarea:focus, button:focus-visible {
 
   function generateFreshBoard(resetTimer = true) {
     generateFreshBoardForMode(state.gameMode || "steve", resetTimer);
+  }
+
+  // Automatically updates a board ONLY if:
+  // 1. The player hasn't joined today's game yet (!state.playedToday), OR
+  // 2. The player clicked "Yes, Let's Play Today!" before MQTT finished its initial connection
+  //    (awaitingFirstRoomPoolSync === true) and hasn't received the room's saved custom pool yet.
+  // NEVER clears or modifies existing active players' boards!
+  function upgradeNewcomerBoardIfNeeded(mode, allowUpdateUnmarkedActive = false, isLiveSettingsSave = false) {
+    if (!mode) return;
+    if (!state.boards) state.boards = {};
+    const b = state.boards[mode];
+    const poolVer = (state.phrasePoolsUpdatedAt && state.phrasePoolsUpdatedAt[mode]) || 0;
+    const boardVer = (b && b.poolVersion) || 0;
+
+    if (!b || !Array.isArray(b.board) || b.board.length !== 25) {
+      generateFreshBoardForMode(mode, false);
+      return;
+    }
+
+    const markedNonFree = Array.isArray(b.marked)
+      ? b.marked.filter((v, idx) => v && idx !== 12).length
+      : 0;
+
+    // Case 1: Player is at the "Would you like to play today?" welcome gate (!state.playedToday)
+    // Always keep their board updated to the latest room phrase pool so it's ready immediately.
+    if (!state.playedToday && poolVer > boardVer) {
+      generateFreshBoardForMode(mode, false);
+      if (state.gameMode === mode) {
+        syncActiveModeToState();
+        renderBoard();
+      }
+      return;
+    }
+
+    // Never modify or clear the board of a player who is already playing when a live settings save occurs!
+    if (isLiveSettingsSave && state.playedToday) {
+      return;
+    }
+
+    // Case 2: Newcomer clicked "Yes, Let's Play Today!" before MQTT finished connecting (awaitingFirstRoomPoolSync)
+    // and now the room's custom phrase pool has arrived!
+    if (awaitingFirstRoomPoolSync && poolVer > boardVer && boardVer === 0) {
+      if (markedNonFree === 0) {
+        generateFreshBoardForMode(mode, false);
+        if (state.gameMode === mode) {
+          syncActiveModeToState();
+          renderBoard();
+        }
+      } else {
+        // Preserve any marked square(s) and swap all unmarked tiles to the room's custom phrase pool
+        const poolData = (state.phrasePools && state.phrasePools[mode]) || (mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES);
+        const pool = poolData.filter(p => p && p.trim().length > 0);
+        const defaults = mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES;
+        const alreadyOnMarked = new Set(
+          b.board.filter((txt, idx) => b.marked[idx] && idx !== 12).map(t => String(t).toLowerCase())
+        );
+        let candidates = shuffleArray(pool.filter(p => !alreadyOnMarked.has(p.toLowerCase())));
+        const unusedDefaults = shuffleArray(
+          defaults.filter(d => !alreadyOnMarked.has(d.toLowerCase()) && !pool.some(p => p.toLowerCase() === d.toLowerCase()))
+        );
+        candidates = [...candidates, ...unusedDefaults];
+        let cIdx = 0;
+        for (let i = 0; i < 25; i++) {
+          if (i !== 12 && !b.marked[i] && cIdx < candidates.length) {
+            b.board[i] = candidates[cIdx++];
+          }
+        }
+        b.poolVersion = poolVer;
+        if (state.gameMode === mode) {
+          syncActiveModeToState();
+          renderBoard();
+        }
+        saveState();
+      }
+    }
+  }
+
+  function applyIncomingPhrasePools(incomingPools, incomingUpdatedAt, isLiveSettingsSave = false) {
+    if (!incomingPools || typeof incomingPools !== "object") return false;
+    if (!state.phrasePools) {
+      state.phrasePools = {
+        steve: [...DEFAULT_STEVE_PHRASES],
+        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      };
+    }
+    if (!state.phrasePoolsUpdatedAt || typeof state.phrasePoolsUpdatedAt !== "object") {
+      state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+    }
+    const updatedMap = (incomingUpdatedAt && typeof incomingUpdatedAt === "object") ? incomingUpdatedAt : {};
+    let anyChanged = false;
+
+    ["steve", "everybody"].forEach(m => {
+      const inTime = Number(updatedMap[m]) || 0;
+      const localTime = Number(state.phrasePoolsUpdatedAt[m]) || 0;
+      if (inTime > 0 && inTime >= localTime && Array.isArray(incomingPools[m]) && incomingPools[m].length > 0) {
+        const isDifferent = inTime > localTime || JSON.stringify(state.phrasePools[m]) !== JSON.stringify(incomingPools[m]);
+        state.phrasePools[m] = [...incomingPools[m]];
+        state.phrasePoolsUpdatedAt[m] = inTime;
+        if (state.gameMode === m) {
+          state.phrases = [...incomingPools[m]];
+        }
+        upgradeNewcomerBoardIfNeeded(m, false, isLiveSettingsSave);
+        if (isDifferent) anyChanged = true;
+      }
+    });
+
+    if (anyChanged) {
+      awaitingFirstRoomPoolSync = false;
+      saveState();
+      if (settingsUnlocked) renderSettingsManagerView();
+    }
+    return anyChanged;
   }
 
   function getLinesDefinitions() {
@@ -3025,6 +3147,9 @@ input:focus, textarea:focus, button:focus-visible {
           if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
           const now = Date.now();
           state.phrasePoolsUpdatedAt[targetMode] = now;
+          if (!state.playedToday) {
+            upgradeNewcomerBoardIfNeeded(targetMode, false, true);
+          }
 
           // 4. Broadcast updated phrase pool for this specific mode with timestamp
           broadcastEvent({
@@ -3035,7 +3160,8 @@ input:focus, textarea:focus, button:focus-visible {
             updatedAt: now
           });
 
-          // 5. Update retained suggestions sync & room snapshot
+          // 5. Update retained phrase pools, suggestions sync & room snapshot
+          publishPhrasePoolsSync(targetMode);
           publishSuggestionsSync();
           publishRoomSnapshot();
         };
@@ -3175,12 +3301,13 @@ input:focus, textarea:focus, button:focus-visible {
         state.playedToday = false;
         state.bingosCount = 0;
         state.linesCount = 0;
-        state.marked = Array(25).fill(false);
-        state.marked[12] = true;
         state.timerStartedAt = null;
         state.timerElapsedBefore = 0;
         state.isCompleted = false;
         state.cardAchievements = [];
+        generateFreshBoardForMode("steve", false);
+        generateFreshBoardForMode("everybody", false);
+        syncActiveModeToState();
         stopTimerTicker();
         updateTimerDisplay();
         renderBoard();
@@ -3208,12 +3335,13 @@ input:focus, textarea:focus, button:focus-visible {
       state.playedToday = false;
       state.bingosCount = 0;
       state.linesCount = 0;
-      state.marked = Array(25).fill(false);
-      state.marked[12] = true;
       state.timerStartedAt = null;
       state.timerElapsedBefore = 0;
       state.isCompleted = false;
       state.cardAchievements = [];
+      generateFreshBoardForMode("steve", false);
+      generateFreshBoardForMode("everybody", false);
+      syncActiveModeToState();
       stopTimerTicker();
       updateTimerDisplay();
 
@@ -3356,21 +3484,19 @@ input:focus, textarea:focus, button:focus-visible {
       state.phrases = unique;
     }
 
-    // Immediately regenerate the board for this mode so the saved prompt list is active right now!
-    generateFreshBoardForMode(mode, false);
-    if (state.gameMode === mode) {
-      syncActiveModeToState();
-      renderBoard();
+    // Only auto-update boards for unstarted players (!state.playedToday); never clear active players' boards!
+    if (!state.playedToday) {
+      upgradeNewcomerBoardIfNeeded(mode, false, true);
     }
 
     saveState();
     $("settingsPhraseCount").textContent = unique.length;
     const modeLabel = mode === "steve" ? "Steve Prompts" : "Everybody Prompts";
     const statusMsg = unique.length >= 24
-      ? `✓ Saved ${unique.length} phrases for ${modeLabel}! Board refreshed with your prompts.`
-      : `✓ Saved ${unique.length} custom phrases for ${modeLabel}! Board now includes all your custom prompts (padded to 24 with defaults).`;
+      ? `✓ Saved ${unique.length} phrases for ${modeLabel}! New players get these immediately (active boards were not cleared).`
+      : `✓ Saved ${unique.length} custom phrases for ${modeLabel}! New players get all custom prompts immediately (active boards not cleared).`;
     $("settingsPhrasesStatus").textContent = statusMsg;
-    showToast("📝", "Phrase Pool Saved", `${modeLabel} updated (${unique.length} phrases).`);
+    showToast("📝", "Phrase Pool Saved", `${modeLabel} saved (${unique.length} phrases). New players get it immediately!`);
 
     // Broadcast updated phrase pool with timestamp to all connected browsers
     broadcastEvent({
@@ -3380,6 +3506,7 @@ input:focus, textarea:focus, button:focus-visible {
       phrases: unique,
       updatedAt: now
     });
+    publishPhrasePoolsSync(mode);
     publishRoomSnapshot();
   }
 
@@ -3397,10 +3524,8 @@ input:focus, textarea:focus, button:focus-visible {
       if (state.gameMode === mode) {
         state.phrases = [...defaults];
       }
-      generateFreshBoardForMode(mode, false);
-      if (state.gameMode === mode) {
-        syncActiveModeToState();
-        renderBoard();
+      if (!state.playedToday) {
+        upgradeNewcomerBoardIfNeeded(mode, false, true);
       }
       saveState();
       handleSwitchSettingsPhrasePool(mode);
@@ -3414,6 +3539,7 @@ input:focus, textarea:focus, button:focus-visible {
         phrases: defaults,
         updatedAt: now
       });
+      publishPhrasePoolsSync(mode);
       publishRoomSnapshot();
     });
   }
@@ -3491,6 +3617,23 @@ input:focus, textarea:focus, button:focus-visible {
     const nickInput = $("dailyGateNickInput").value.trim().slice(0, 24);
     if (nickInput) {
       state.nickname = nickInput;
+    }
+    // Ensure both mode boards are built from the latest synced phrase pool before starting today's game
+    ["steve", "everybody"].forEach(m => {
+      const poolVer = (state.phrasePoolsUpdatedAt && state.phrasePoolsUpdatedAt[m]) || 0;
+      const b = state.boards && state.boards[m];
+      const boardVer = (b && b.poolVersion) || 0;
+      const markedNonFree = (b && Array.isArray(b.marked)) ? b.marked.filter((v, idx) => v && idx !== 12).length : 0;
+      if (poolVer > boardVer && markedNonFree === 0) {
+        generateFreshBoardForMode(m, false);
+      }
+    });
+    syncActiveModeToState();
+    renderBoard();
+
+    const hasLocalCustomPool = ((state.phrasePoolsUpdatedAt?.steve || 0) > 0) || ((state.phrasePoolsUpdatedAt?.everybody || 0) > 0);
+    if (!hasLocalCustomPool && mqttMessagesReceived === 0) {
+      awaitingFirstRoomPoolSync = true;
     }
     state.playedToday = true;
 
@@ -4031,7 +4174,12 @@ input:focus, textarea:focus, button:focus-visible {
             sendMqtt(item.topic, item.payload, item.retained);
           }
 
-          // If already checked in today, broadcast presence and publish room snapshot
+          // If this browser holds custom phrase pools, ensure the dedicated retained topic is populated
+          if ((state.phrasePoolsUpdatedAt?.steve || 0) > 0 || (state.phrasePoolsUpdatedAt?.everybody || 0) > 0) {
+            publishPhrasePoolsSync();
+          }
+
+          // If already checked in today, broadcast presence
           if (state.playedToday) {
             broadcastEvent({
               type: "player_sync",
@@ -4042,7 +4190,6 @@ input:focus, textarea:focus, button:focus-visible {
               fastestMs: state.isCompleted ? getElapsedMs() : 0,
               feed: (state.dailyFeed || []).slice(0, 15)
             });
-            publishRoomSnapshot();
           }
 
           // Query any existing players in this room to sync newcomer immediately
@@ -4117,9 +4264,49 @@ input:focus, textarea:focus, button:focus-visible {
     sendMqtt("events", msg, false);
   }
 
+  function publishPhrasePoolsSync(onlyMode = null) {
+    if (!state.phrasePools || !state.phrasePoolsUpdatedAt) return;
+    const modes = onlyMode ? [onlyMode] : ["steve", "everybody"];
+    modes.forEach(m => {
+      const ts = Number(state.phrasePoolsUpdatedAt[m]) || 0;
+      if (ts > 0 && Array.isArray(state.phrasePools[m]) && state.phrasePools[m].length > 0) {
+        sendMqtt("phrase_pool_" + m, {
+          type: "phrase_pools_sync",
+          eventId: "pp_" + m + "_" + CLIENT_ID + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+          clientId: CLIENT_ID,
+          timestamp: Date.now(),
+          phrasePools: { [m]: state.phrasePools[m] },
+          phrasePoolsUpdatedAt: { [m]: ts }
+        }, true);
+      }
+    });
+
+    const steveTs = Number(state.phrasePoolsUpdatedAt.steve) || 0;
+    const everyTs = Number(state.phrasePoolsUpdatedAt.everybody) || 0;
+    if (steveTs > 0 || everyTs > 0) {
+      sendMqtt("phrase_pools", {
+        type: "phrase_pools_sync",
+        eventId: "pp_all_" + CLIENT_ID + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+        clientId: CLIENT_ID,
+        timestamp: Date.now(),
+        phrasePools: {
+          steve: steveTs > 0 ? state.phrasePools.steve : null,
+          everybody: everyTs > 0 ? state.phrasePools.everybody : null
+        },
+        phrasePoolsUpdatedAt: {
+          steve: steveTs,
+          everybody: everyTs
+        }
+      }, true);
+    }
+  }
+
   function publishRoomSnapshot() {
+    const steveTs = Number(state.phrasePoolsUpdatedAt?.steve) || 0;
+    const everyTs = Number(state.phrasePoolsUpdatedAt?.everybody) || 0;
     const snapshot = {
       type: "snapshot",
+      eventId: "snap_" + CLIENT_ID + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
       user: state.nickname || "Anonymous",
       clientId: CLIENT_ID,
       timestamp: Date.now(),
@@ -4128,14 +4315,15 @@ input:focus, textarea:focus, button:focus-visible {
       dailyPlayers: state.dailyPlayers || {},
       dailyLeaderboardRuns: (state.dailyLeaderboardRuns || []).filter(r => (r.timestamp || 0) >= (state.leaderboardClearedAt || 0)).slice(0, 30),
       dailyFeed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 30),
-      phrases: state.phrases || [...DEFAULT_PHRASES],
-      phrasePools: state.phrasePools || {
-        steve: [...DEFAULT_STEVE_PHRASES],
-        everybody: [...DEFAULT_EVERYBODY_PHRASES]
+      // Only include phrasePools for modes that have actually been customized (ts > 0)
+      // so a client with default pools never clobbers the room's custom phrases
+      phrasePools: {
+        steve: (steveTs > 0 && Array.isArray(state.phrasePools?.steve)) ? state.phrasePools.steve : null,
+        everybody: (everyTs > 0 && Array.isArray(state.phrasePools?.everybody)) ? state.phrasePools.everybody : null
       },
-      phrasePoolsUpdatedAt: state.phrasePoolsUpdatedAt || {
-        steve: 0,
-        everybody: 0
+      phrasePoolsUpdatedAt: {
+        steve: steveTs,
+        everybody: everyTs
       },
       passcode: state.passcode || DEFAULT_PIN,
       passcodeUpdatedAt: state.passcodeUpdatedAt || 0,
@@ -4173,6 +4361,7 @@ input:focus, textarea:focus, button:focus-visible {
 
   function handleIncomingBroadcast(data) {
     if (!data || !data.type) return;
+    mqttMessagesReceived++;
 
     // Deduplication check
     const key = data.eventId || `${data.type}_${data.user}_${data.timestamp}`;
@@ -4204,6 +4393,12 @@ input:focus, textarea:focus, button:focus-visible {
         avatarEmoji: data.avatar || data.profile.avatarEmoji || existing.avatarEmoji || "🍟"
       };
       saveState();
+    }
+
+    // 0a. DEDICATED PHRASE POOLS SYNC: Retained per-mode or combined custom phrase pools
+    if (data.type === "phrase_pools_sync" && data.phrasePools) {
+      applyIncomingPhrasePools(data.phrasePools, data.phrasePoolsUpdatedAt);
+      return;
     }
 
     // 0. RETAINED ROOM SNAPSHOT: Received when newcomer joins an existing active room
@@ -4252,26 +4447,9 @@ input:focus, textarea:focus, button:focus-visible {
         });
       }
 
-      // 4. Sync room phrase pools (respecting timestamps so saved custom prompts are never clobbered)
+      // 4. Sync room phrase pools and auto-upgrade newcomer boards immediately
       if (data.phrasePools && typeof data.phrasePools === "object") {
-        if (!state.phrasePools) state.phrasePools = {};
-        if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
-        const incomingUpdated = data.phrasePoolsUpdatedAt || {};
-        let poolChanged = false;
-
-        ["steve", "everybody"].forEach(m => {
-          const inTime = typeof incomingUpdated === "object" ? (incomingUpdated[m] || 0) : 0;
-          const localTime = state.phrasePoolsUpdatedAt[m] || 0;
-          if (inTime > localTime && Array.isArray(data.phrasePools[m]) && data.phrasePools[m].length > 0) {
-            state.phrasePools[m] = [...data.phrasePools[m]];
-            state.phrasePoolsUpdatedAt[m] = inTime;
-            poolChanged = true;
-          }
-        });
-
-        if (poolChanged) {
-          syncActiveModeToState();
-          if (settingsUnlocked) renderSettingsManagerView();
+        if (applyIncomingPhrasePools(data.phrasePools, data.phrasePoolsUpdatedAt)) {
           changed = true;
         }
       }
@@ -4360,21 +4538,11 @@ input:focus, textarea:focus, button:focus-visible {
     if (data.type === "settings_update") {
       if (data.setting === "phrases" && Array.isArray(data.phrases) && data.phrases.length > 0) {
         const targetMode = data.mode || "steve";
-        if (!state.phrasePools) state.phrasePools = {};
-        if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
         const inTime = data.updatedAt || data.timestamp || Date.now();
-        const localTime = state.phrasePoolsUpdatedAt[targetMode] || 0;
+        const localTime = (state.phrasePoolsUpdatedAt && state.phrasePoolsUpdatedAt[targetMode]) || 0;
 
         if (inTime >= localTime) {
-          state.phrasePools[targetMode] = [...data.phrases];
-          state.phrasePoolsUpdatedAt[targetMode] = inTime;
-          if (state.gameMode === targetMode) {
-            state.phrases = [...data.phrases];
-            generateFreshBoardForMode(targetMode, false);
-            renderBoard();
-          }
-          saveState();
-          if (settingsUnlocked) renderSettingsManagerView();
+          applyIncomingPhrasePools({ [targetMode]: data.phrases }, { [targetMode]: inTime }, true);
           const modeLabel = targetMode === "steve" ? "Steve Prompts" : "Everybody Prompts";
           showToast("📝", "Phrase Pool Updated", `${modeLabel} updated (${data.phrases.length} phrases).`);
         }
@@ -4425,7 +4593,18 @@ input:focus, textarea:focus, button:focus-visible {
       };
       renderLeaderboard();
 
-      // Reply with our own player_sync AND full feed so newcomer's feed overlaps immediately
+      // If this browser holds custom phrase pools, always push them to the joining player immediately
+      const hasCustomPools = (state.phrasePoolsUpdatedAt?.steve || 0) > 0 || (state.phrasePoolsUpdatedAt?.everybody || 0) > 0;
+      if (hasCustomPools) {
+        broadcastEvent({
+          type: "phrase_pools_sync",
+          phrasePools: state.phrasePools,
+          phrasePoolsUpdatedAt: state.phrasePoolsUpdatedAt
+        });
+        publishPhrasePoolsSync();
+      }
+
+      // Reply with our own player_sync, phrasePools, AND full feed so newcomer is synced immediately
       if (state.playedToday) {
         broadcastEvent({
           type: "presence_response",
@@ -4434,15 +4613,29 @@ input:focus, textarea:focus, button:focus-visible {
           squares: state.marked.filter(Boolean).length,
           bingos: state.bingosCount || 0,
           fastestMs: state.isCompleted ? getElapsedMs() : 0,
+          phrasePools: hasCustomPools ? state.phrasePools : null,
+          phrasePoolsUpdatedAt: hasCustomPools ? state.phrasePoolsUpdatedAt : null,
           feed: (state.dailyFeed || []).slice(0, 20)
         });
-        publishRoomSnapshot();
+        if (hasCustomPools) {
+          publishRoomSnapshot();
+        }
       }
       return;
     }
 
-    // 2. PRESENCE QUERY: New player asking for existing room roster & feed
+    // 2. PRESENCE QUERY: New player asking for existing room roster, custom phrase pools & feed
     if (data.type === "presence_query") {
+      const hasCustomPools = (state.phrasePoolsUpdatedAt?.steve || 0) > 0 || (state.phrasePoolsUpdatedAt?.everybody || 0) > 0;
+      if (hasCustomPools) {
+        broadcastEvent({
+          type: "phrase_pools_sync",
+          phrasePools: state.phrasePools,
+          phrasePoolsUpdatedAt: state.phrasePoolsUpdatedAt
+        });
+        publishPhrasePoolsSync();
+      }
+
       if (state.playedToday) {
         const myProf = getProfile(state.nickname);
         broadcastEvent({
@@ -4461,8 +4654,8 @@ input:focus, textarea:focus, button:focus-visible {
             avatarEmoji: state.avatarEmoji || "🍟"
           },
           suggestions: (state.suggestions || []).slice(0, 50),
-          phrasePools: state.phrasePools || null,
-          phrasePoolsUpdatedAt: state.phrasePoolsUpdatedAt || null,
+          phrasePools: hasCustomPools ? state.phrasePools : null,
+          phrasePoolsUpdatedAt: hasCustomPools ? state.phrasePoolsUpdatedAt : null,
           feed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 20)
         });
         if (state.isCompleted && Array.isArray(state.dailyLeaderboardRuns)) {
@@ -4507,25 +4700,7 @@ input:focus, textarea:focus, button:focus-visible {
         if (settingsUnlocked) renderSettingsManagerView();
       }
       if (data.phrasePools && typeof data.phrasePools === "object") {
-        if (!state.phrasePools) state.phrasePools = {};
-        if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
-        const incomingUpdated = data.phrasePoolsUpdatedAt || {};
-        let poolChanged = false;
-
-        ["steve", "everybody"].forEach(m => {
-          const inTime = typeof incomingUpdated === "object" ? (incomingUpdated[m] || 0) : 0;
-          const localTime = state.phrasePoolsUpdatedAt[m] || 0;
-          if (inTime > localTime && Array.isArray(data.phrasePools[m]) && data.phrasePools[m].length > 0) {
-            state.phrasePools[m] = [...data.phrasePools[m]];
-            state.phrasePoolsUpdatedAt[m] = inTime;
-            poolChanged = true;
-          }
-        });
-
-        if (poolChanged) {
-          syncActiveModeToState();
-          if (settingsUnlocked) renderSettingsManagerView();
-        }
+        applyIncomingPhrasePools(data.phrasePools, data.phrasePoolsUpdatedAt);
       }
       renderLeaderboard();
       return;
@@ -4635,12 +4810,13 @@ input:focus, textarea:focus, button:focus-visible {
         state.playedToday = false;
         state.bingosCount = 0;
         state.linesCount = 0;
-        state.marked = Array(25).fill(false);
-        state.marked[12] = true;
         state.timerStartedAt = null;
         state.timerElapsedBefore = 0;
         state.isCompleted = false;
         state.cardAchievements = [];
+        generateFreshBoardForMode("steve", false);
+        generateFreshBoardForMode("everybody", false);
+        syncActiveModeToState();
         stopTimerTicker();
         updateTimerDisplay();
         renderBoard();
@@ -4660,12 +4836,13 @@ input:focus, textarea:focus, button:focus-visible {
       state.playedToday = false;
       state.bingosCount = 0;
       state.linesCount = 0;
-      state.marked = Array(25).fill(false);
-      state.marked[12] = true;
       state.timerStartedAt = null;
       state.timerElapsedBefore = 0;
       state.isCompleted = false;
       state.cardAchievements = [];
+      generateFreshBoardForMode("steve", false);
+      generateFreshBoardForMode("everybody", false);
+      syncActiveModeToState();
       stopTimerTicker();
       updateTimerDisplay();
       saveState();
@@ -4833,10 +5010,15 @@ input:focus, textarea:focus, button:focus-visible {
         if (phrase && !state.phrasePools[targetMode].some(p => p.toLowerCase() === phrase.toLowerCase())) {
           state.phrasePools[targetMode].push(phrase);
         }
+        if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+        state.phrasePoolsUpdatedAt[targetMode] = Math.max(state.phrasePoolsUpdatedAt[targetMode] || 0, data.timestamp || Date.now());
         if (state.gameMode === targetMode) {
           if (phrase && !state.phrases.some(p => p.toLowerCase() === phrase.toLowerCase())) {
             state.phrases.push(phrase);
           }
+        }
+        if (!state.playedToday) {
+          upgradeNewcomerBoardIfNeeded(targetMode, false, true);
         }
         if ((data.author && data.author === state.nickname) || (s && s.suggestedBy === state.nickname)) {
           unlockAchievement("crowd_pleaser", state.nickname);

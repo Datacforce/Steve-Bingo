@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1e1a2e">
-<title>Steve Bingo!</title>
+<title>Steve Bingo! 🍟</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍟</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 <style>
@@ -1269,6 +1269,10 @@ input:focus, textarea:focus, button:focus-visible {
       steve: [...DEFAULT_STEVE_PHRASES],
       everybody: [...DEFAULT_EVERYBODY_PHRASES]
     },
+    phrasePoolsUpdatedAt: {
+      steve: 0,
+      everybody: 0
+    },
     phrases: [...DEFAULT_STEVE_PHRASES],
     board: [],
     marked: [],
@@ -1338,8 +1342,6 @@ input:focus, textarea:focus, button:focus-visible {
       linesCount: state.linesCount || 0,
       cardAchievements: [...(state.cardAchievements || [])]
     };
-    if (!state.phrasePools) state.phrasePools = {};
-    state.phrasePools[mode] = [...(state.phrases || (mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES))];
   }
 
   function updateModeSwitcherUI() {
@@ -1438,19 +1440,22 @@ input:focus, textarea:focus, button:focus-visible {
 
     // Mode & Phrase Pools initialization
     if (!state.gameMode) state.gameMode = "steve";
+    if (!state.phrasePoolsUpdatedAt || typeof state.phrasePoolsUpdatedAt !== "object") {
+      state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+    }
     if (!state.phrasePools) {
       state.phrasePools = {
         steve: [...DEFAULT_STEVE_PHRASES],
         everybody: [...DEFAULT_EVERYBODY_PHRASES]
       };
-      if (Array.isArray(state.phrases) && state.phrases.length >= 24) {
+      if (Array.isArray(state.phrases) && state.phrases.length > 0) {
         state.phrasePools.steve = [...state.phrases];
       }
     } else {
-      if (!Array.isArray(state.phrasePools.steve) || state.phrasePools.steve.length < 24) {
+      if (!Array.isArray(state.phrasePools.steve) || state.phrasePools.steve.length === 0) {
         state.phrasePools.steve = [...DEFAULT_STEVE_PHRASES];
       }
-      if (!Array.isArray(state.phrasePools.everybody) || state.phrasePools.everybody.length < 24) {
+      if (!Array.isArray(state.phrasePools.everybody) || state.phrasePools.everybody.length === 0) {
         state.phrasePools.everybody = [...DEFAULT_EVERYBODY_PHRASES];
       }
     }
@@ -1594,9 +1599,25 @@ input:focus, textarea:focus, button:focus-visible {
     const poolData = state.phrasePools[mode] || (mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES);
     let pool = poolData.filter(p => p && p.trim().length > 0);
     const defaults = mode === "steve" ? DEFAULT_STEVE_PHRASES : DEFAULT_EVERYBODY_PHRASES;
-    if (pool.length < phrasesNeeded) pool = [...defaults];
 
-    const chosen = shuffleArray(pool).slice(0, phrasesNeeded);
+    let chosen = [];
+    if (!pool.length) {
+      chosen = shuffleArray(defaults).slice(0, phrasesNeeded);
+    } else if (pool.length < phrasesNeeded) {
+      // User entered custom phrases (< 24):
+      // Guarantee ALL user custom phrases appear on the card!
+      chosen = shuffleArray(pool);
+      // Fill the remaining slots with defaults that do not duplicate user phrases
+      const unusedDefaults = shuffleArray(defaults.filter(d => !pool.some(p => p.toLowerCase() === d.toLowerCase())));
+      const needed = phrasesNeeded - chosen.length;
+      chosen = shuffleArray([...chosen, ...unusedDefaults.slice(0, needed)]);
+      // Defensive fallback if defaults pool is small
+      while (chosen.length < phrasesNeeded) {
+        chosen.push(defaults[chosen.length % defaults.length]);
+      }
+    } else {
+      chosen = shuffleArray(pool).slice(0, phrasesNeeded);
+    }
     const newBoard = [];
     let pIdx = 0;
     for (let i = 0; i < 25; i++) {
@@ -3001,12 +3022,17 @@ input:focus, textarea:focus, button:focus-visible {
             approvedSuggestionIds: state.approvedSuggestionIds
           });
 
-          // 4. Broadcast updated phrase pool for this specific mode
+          if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+          const now = Date.now();
+          state.phrasePoolsUpdatedAt[targetMode] = now;
+
+          // 4. Broadcast updated phrase pool for this specific mode with timestamp
           broadcastEvent({
             type: "settings_update",
             setting: "phrases",
             mode: targetMode,
-            phrases: state.phrasePools[targetMode]
+            phrases: state.phrasePools[targetMode],
+            updatedAt: now
           });
 
           // 5. Update retained suggestions sync & room snapshot
@@ -3313,29 +3339,46 @@ input:focus, textarea:focus, button:focus-visible {
     const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     const unique = [...new Set(lines)];
 
-    if (unique.length < 24) {
-      $("settingsPhrasesStatus").textContent = `At least 24 unique phrases required for 5×5 bingo (currently ${unique.length}).`;
+    if (unique.length === 0) {
+      $("settingsPhrasesStatus").textContent = "Please enter at least one phrase before saving.";
       return;
     }
 
     const mode = settingsCurrentPhraseMode || "steve";
     if (!state.phrasePools) state.phrasePools = {};
+    if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+
     state.phrasePools[mode] = unique;
+    const now = Date.now();
+    state.phrasePoolsUpdatedAt[mode] = now;
+
     if (state.gameMode === mode) {
       state.phrases = unique;
     }
+
+    // Immediately regenerate the board for this mode so the saved prompt list is active right now!
+    generateFreshBoardForMode(mode, false);
+    if (state.gameMode === mode) {
+      syncActiveModeToState();
+      renderBoard();
+    }
+
     saveState();
     $("settingsPhraseCount").textContent = unique.length;
     const modeLabel = mode === "steve" ? "Steve Prompts" : "Everybody Prompts";
-    $("settingsPhrasesStatus").textContent = `✓ Saved ${unique.length} phrases for ${modeLabel}! Fresh boards will pull from this pool.`;
+    const statusMsg = unique.length >= 24
+      ? `✓ Saved ${unique.length} phrases for ${modeLabel}! Board refreshed with your prompts.`
+      : `✓ Saved ${unique.length} custom phrases for ${modeLabel}! Board now includes all your custom prompts (padded to 24 with defaults).`;
+    $("settingsPhrasesStatus").textContent = statusMsg;
     showToast("📝", "Phrase Pool Saved", `${modeLabel} updated (${unique.length} phrases).`);
 
-    // Broadcast updated phrase pool to all connected browsers
+    // Broadcast updated phrase pool with timestamp to all connected browsers
     broadcastEvent({
       type: "settings_update",
       setting: "phrases",
       mode: mode,
-      phrases: unique
+      phrases: unique,
+      updatedAt: now
     });
     publishRoomSnapshot();
   }
@@ -3347,9 +3390,17 @@ input:focus, textarea:focus, button:focus-visible {
 
     openConfirmPrompt("Restore Default Phrases", `Reset ${modeLabel} phrase pool back to default 50 phrases?`, () => {
       if (!state.phrasePools) state.phrasePools = {};
+      if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+      const now = Date.now();
       state.phrasePools[mode] = [...defaults];
+      state.phrasePoolsUpdatedAt[mode] = now;
       if (state.gameMode === mode) {
         state.phrases = [...defaults];
+      }
+      generateFreshBoardForMode(mode, false);
+      if (state.gameMode === mode) {
+        syncActiveModeToState();
+        renderBoard();
       }
       saveState();
       handleSwitchSettingsPhrasePool(mode);
@@ -3360,7 +3411,8 @@ input:focus, textarea:focus, button:focus-visible {
         type: "settings_update",
         setting: "phrases",
         mode: mode,
-        phrases: defaults
+        phrases: defaults,
+        updatedAt: now
       });
       publishRoomSnapshot();
     });
@@ -4081,6 +4133,10 @@ input:focus, textarea:focus, button:focus-visible {
         steve: [...DEFAULT_STEVE_PHRASES],
         everybody: [...DEFAULT_EVERYBODY_PHRASES]
       },
+      phrasePoolsUpdatedAt: state.phrasePoolsUpdatedAt || {
+        steve: 0,
+        everybody: 0
+      },
       passcode: state.passcode || DEFAULT_PIN,
       passcodeUpdatedAt: state.passcodeUpdatedAt || 0,
       suggestions: (state.suggestions || []).slice(0, 50),
@@ -4196,22 +4252,28 @@ input:focus, textarea:focus, button:focus-visible {
         });
       }
 
-      // 4. Sync room phrase pools
+      // 4. Sync room phrase pools (respecting timestamps so saved custom prompts are never clobbered)
       if (data.phrasePools && typeof data.phrasePools === "object") {
         if (!state.phrasePools) state.phrasePools = {};
-        if (Array.isArray(data.phrasePools.steve) && data.phrasePools.steve.length >= 24) {
-          state.phrasePools.steve = [...data.phrasePools.steve];
+        if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+        const incomingUpdated = data.phrasePoolsUpdatedAt || {};
+        let poolChanged = false;
+
+        ["steve", "everybody"].forEach(m => {
+          const inTime = typeof incomingUpdated === "object" ? (incomingUpdated[m] || 0) : 0;
+          const localTime = state.phrasePoolsUpdatedAt[m] || 0;
+          if (inTime > localTime && Array.isArray(data.phrasePools[m]) && data.phrasePools[m].length > 0) {
+            state.phrasePools[m] = [...data.phrasePools[m]];
+            state.phrasePoolsUpdatedAt[m] = inTime;
+            poolChanged = true;
+          }
+        });
+
+        if (poolChanged) {
+          syncActiveModeToState();
+          if (settingsUnlocked) renderSettingsManagerView();
+          changed = true;
         }
-        if (Array.isArray(data.phrasePools.everybody) && data.phrasePools.everybody.length >= 24) {
-          state.phrasePools.everybody = [...data.phrasePools.everybody];
-        }
-        syncActiveModeToState();
-        if (settingsUnlocked) renderSettingsManagerView();
-      } else if (Array.isArray(data.phrases) && data.phrases.length >= 24) {
-        state.phrases = [...data.phrases];
-        if (!state.phrasePools) state.phrasePools = {};
-        state.phrasePools.steve = [...data.phrases];
-        if (settingsUnlocked) renderSettingsManagerView();
       }
 
       // 5. Sync manager passcode (ONLY if newer or never set, prevents resetting to 0000)
@@ -4296,16 +4358,26 @@ input:focus, textarea:focus, button:focus-visible {
 
     // 0d. SETTINGS UPDATE: Synchronize word pool and passcode in real time
     if (data.type === "settings_update") {
-      if (data.setting === "phrases" && Array.isArray(data.phrases) && data.phrases.length >= 24) {
+      if (data.setting === "phrases" && Array.isArray(data.phrases) && data.phrases.length > 0) {
         const targetMode = data.mode || "steve";
         if (!state.phrasePools) state.phrasePools = {};
-        state.phrasePools[targetMode] = [...data.phrases];
-        if (state.gameMode === targetMode) {
-          state.phrases = [...data.phrases];
+        if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+        const inTime = data.updatedAt || data.timestamp || Date.now();
+        const localTime = state.phrasePoolsUpdatedAt[targetMode] || 0;
+
+        if (inTime >= localTime) {
+          state.phrasePools[targetMode] = [...data.phrases];
+          state.phrasePoolsUpdatedAt[targetMode] = inTime;
+          if (state.gameMode === targetMode) {
+            state.phrases = [...data.phrases];
+            generateFreshBoardForMode(targetMode, false);
+            renderBoard();
+          }
+          saveState();
+          if (settingsUnlocked) renderSettingsManagerView();
+          const modeLabel = targetMode === "steve" ? "Steve Prompts" : "Everybody Prompts";
+          showToast("📝", "Phrase Pool Updated", `${modeLabel} updated (${data.phrases.length} phrases).`);
         }
-        saveState();
-        if (settingsUnlocked) renderSettingsManagerView();
-        showToast("📝", "Phrase Pool Updated", `${targetMode === "steve" ? "Steve" : "Everybody"} phrase pool updated to ${data.phrases.length} phrases.`);
       }
       if (data.setting === "passcode" && data.passcode) {
         const updateTime = data.passcodeUpdatedAt || data.updatedAt || 0;
@@ -4390,6 +4462,7 @@ input:focus, textarea:focus, button:focus-visible {
           },
           suggestions: (state.suggestions || []).slice(0, 50),
           phrasePools: state.phrasePools || null,
+          phrasePoolsUpdatedAt: state.phrasePoolsUpdatedAt || null,
           feed: (state.dailyFeed || []).filter(f => (f.timestamp || 0) >= (state.feedClearedAt || 0)).slice(0, 20)
         });
         if (state.isCompleted && Array.isArray(state.dailyLeaderboardRuns)) {
@@ -4435,14 +4508,24 @@ input:focus, textarea:focus, button:focus-visible {
       }
       if (data.phrasePools && typeof data.phrasePools === "object") {
         if (!state.phrasePools) state.phrasePools = {};
-        if (Array.isArray(data.phrasePools.steve) && data.phrasePools.steve.length >= 24) {
-          state.phrasePools.steve = [...data.phrasePools.steve];
+        if (!state.phrasePoolsUpdatedAt) state.phrasePoolsUpdatedAt = { steve: 0, everybody: 0 };
+        const incomingUpdated = data.phrasePoolsUpdatedAt || {};
+        let poolChanged = false;
+
+        ["steve", "everybody"].forEach(m => {
+          const inTime = typeof incomingUpdated === "object" ? (incomingUpdated[m] || 0) : 0;
+          const localTime = state.phrasePoolsUpdatedAt[m] || 0;
+          if (inTime > localTime && Array.isArray(data.phrasePools[m]) && data.phrasePools[m].length > 0) {
+            state.phrasePools[m] = [...data.phrasePools[m]];
+            state.phrasePoolsUpdatedAt[m] = inTime;
+            poolChanged = true;
+          }
+        });
+
+        if (poolChanged) {
+          syncActiveModeToState();
+          if (settingsUnlocked) renderSettingsManagerView();
         }
-        if (Array.isArray(data.phrasePools.everybody) && data.phrasePools.everybody.length >= 24) {
-          state.phrasePools.everybody = [...data.phrasePools.everybody];
-        }
-        syncActiveModeToState();
-        if (settingsUnlocked) renderSettingsManagerView();
       }
       renderLeaderboard();
       return;
